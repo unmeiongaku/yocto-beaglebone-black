@@ -62,4 +62,4 @@ KERNEL_MODULE_AUTOLOAD:append = " \
 IMAGE_INSTALL:append = " wpa-supplicant iw dhcpcd"
 CORE_IMAGE_EXTRA_INSTALL += " packagegroup-base-wifi kernel-modules"
 
-IMAGE_INSTALL:append = " kernel-module-hello"
+IMAGE_INSTALL:append = " hello"
