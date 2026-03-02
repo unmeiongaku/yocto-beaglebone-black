@@ -63,3 +63,4 @@ IMAGE_INSTALL:append = " wpa-supplicant iw dhcpcd"
 CORE_IMAGE_EXTRA_INSTALL += " packagegroup-base-wifi kernel-modules"
 
 IMAGE_INSTALL:append = " hello"
+IMAGE_INSTALL:append = " ll-major-minor"

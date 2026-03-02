@@ -19,25 +19,40 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/fs.h>       /* Define alloc_chrdev_region(), register_chrdev_region() */
 #include <linux/init.h>
 
 #define DRIVER_AUTHOR "desmtiny nguyenhoangminhdo@gmail.com"
 #define DRIVER_DESC   "Hello world kernel module"
 #define DRIVER_VERS   "1.0"
 
-static int __init hello_init(void)
+struct m_foo_dev {
+    dev_t dev_num;
+} mdev;
+
+
+static int __init chdev_init(void)
 {
+    /* 1.0 Dynamic allocating device number (cat /proc/devices) */
+    if (alloc_chrdev_region(&mdev.dev_num, 0, 1, "m_cdev") < 0) {
+	    pr_err("Failed to alloc chrdev region\n");
+	    return -1;
+    }
+    // dev_t dev = MKDEV(173, 0);
+    // register_chrdev_region(&mdev.dev_num, 1, "m-cdev")
+    pr_info("Major = %d Minor = %d\n", MAJOR(mdev.dev_num), MINOR(mdev.dev_num));
     pr_info("Hello World!\n");
     return 0;
 }
 
-static void __exit hello_exit(void)
+static void __exit chdev_exit(void)
 {
-    pr_info("Goodbye Cruel World!\n");
+    unregister_chrdev_region(mdev.dev_num, 1);              /* 1.0 */
+    pr_info("Goodbye!\n");
 }
 
-module_init(hello_init);
-module_exit(hello_exit);
+module_init(chdev_init);
+module_exit(chdev_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR(DRIVER_AUTHOR);
