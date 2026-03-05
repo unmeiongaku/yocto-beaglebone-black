@@ -64,3 +64,4 @@ CORE_IMAGE_EXTRA_INSTALL += " packagegroup-base-wifi kernel-modules"
 
 IMAGE_INSTALL:append = " hello"
 IMAGE_INSTALL:append = " ll-major-minor"
+IMAGE_INSTALL:append = " userspace"

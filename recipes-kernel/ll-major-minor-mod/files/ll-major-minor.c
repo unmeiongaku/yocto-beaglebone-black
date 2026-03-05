@@ -31,7 +31,7 @@
 #define DRIVER_VERS   "1.0"
 #define DEVICE_NAME "m_cdev"
 
-#define BUFFER_SIZE 128
+#define BUFFER_SIZE 1028
 
 static struct m_foo_dev {
     dev_t dev_num;
@@ -58,7 +58,6 @@ static int m_open(struct inode *inode, struct file *file)
 
 static int m_release(struct inode *inode, struct file *file)
 {
-    pr_info("Message From Kernel\n");
     pr_info("Device closed\n");
     return 0;
 }
