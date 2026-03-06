@@ -1,0 +1,1 @@
+disable_uboot_overlay_emmc=1

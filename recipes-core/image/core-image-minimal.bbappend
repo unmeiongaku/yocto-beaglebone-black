@@ -9,6 +9,7 @@ EXTRA_USERS_PARAMS = "\
     usermod -p '${PASSWD}' root; \
     "
 
+IMAGE_INSTALL:append = " uenv"
 IMAGE_INSTALL:append = " banner"
 #IMAGE_INSTALL:append = " initscripts-1.0"
 
@@ -54,6 +55,7 @@ IMAGE_INSTALL:append = " \
     fbset \
     con2fbmap \
 "
+IMAGE_INSTALL:append = " util-linux"
 
 KERNEL_MODULE_AUTOLOAD:append = " \
     rtl8188eu \
