@@ -11,7 +11,6 @@ EXTRA_USERS_PARAMS = "\
 
 IMAGE_INSTALL:append = " uenv"
 IMAGE_INSTALL:append = " banner"
-#IMAGE_INSTALL:append = " initscripts-1.0"
 
 IMAGE_OVERHEAD_FACTOR = "1.2"
 IMAGE_ROOTFS_SIZE = "4194304"   
@@ -67,3 +66,4 @@ CORE_IMAGE_EXTRA_INSTALL += " packagegroup-base-wifi kernel-modules"
 IMAGE_INSTALL:append = " hello"
 IMAGE_INSTALL:append = " ll-major-minor"
 IMAGE_INSTALL:append = " userspace"
+IMAGE_INSTALL:append = " userwificonnect"
