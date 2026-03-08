@@ -1,200 +1,323 @@
-/******************************************************************************
- *
- *   Copyright (C) 2011  Intel Corporation. All rights reserved.
- *
- *   This program is free software;  you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation; version 2 of the License.
- *
- *   This program is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY;  without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
- *   the GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with this program;  if not, write to the Free Software
- *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
- *
- *****************************************************************************/
-
 #include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/fs.h>       /* Define alloc_chrdev_region(), register_chrdev_region() */
-#include <linux/init.h>
+#include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
+#include <linux/wait.h>
+#include <linux/poll.h>
 
-#define DRIVER_AUTHOR "desmtiny nguyenhoangminhdo@gmail.com"
-#define DRIVER_DESC   "Hello world kernel module"
-#define DRIVER_VERS   "1.0"
-#define DEVICE_NAME "m_cdev"
+#define DRIVER_NAME "m_cdev"
 
-#define BUFFER_SIZE 1028
+/* ring buffer config */
 
-static struct m_foo_dev {
-    dev_t dev_num;
-    struct cdev m_cdev;
-    struct class *m_class;
-    struct device *m_device;
-    char buffer[BUFFER_SIZE];
-    size_t size;
-    struct mutex lock;
+#define RING_SIZE 16
+#define MSG_SIZE 128
+
+#define M_IOCTL_CLEAR_BUFFER _IO('m', 0)
+#define M_IOCTL_GET_SIZE     _IOR('m', 1, int)
+
+/* ================= RING BUFFER ================= */
+
+struct ring_buffer {
+
+    char data[RING_SIZE][MSG_SIZE];
+
+    int head;
+    int tail;
+    int count;
 };
 
-static struct m_foo_dev mdev;
+/* ================= DEVICE ================= */
 
-/* ================= FILE OPERATIONS ================= */
+struct m_device {
+
+    dev_t dev_num;
+
+    struct cdev cdev;
+
+    struct class *class;
+
+    struct device *device;
+
+    struct ring_buffer rb;
+
+    struct mutex lock;
+
+    wait_queue_head_t read_queue;
+};
+
+static struct m_device mdev;
+
+/* ================= RING BUFFER OPS ================= */
+
+static int rb_push(struct ring_buffer *rb, const char *msg)
+{
+    if (rb->count == RING_SIZE)
+        return -1;
+
+    strncpy(rb->data[rb->head], msg, MSG_SIZE-1);
+
+    rb->head = (rb->head + 1) % RING_SIZE;
+
+    rb->count++;
+
+    return 0;
+}
+
+static int rb_pop(struct ring_buffer *rb, char *msg)
+{
+    if (rb->count == 0)
+        return -1;
+
+    strncpy(msg, rb->data[rb->tail], MSG_SIZE);
+
+    rb->tail = (rb->tail + 1) % RING_SIZE;
+
+    rb->count--;
+
+    return strlen(msg);
+}
+
+/* ================= FILE OPS ================= */
+
 static int m_open(struct inode *inode, struct file *file)
 {
-    pr_info("Message From Kernel\n");
-    pr_info("Device opened\n");
-    struct m_foo_dev *dev;
-    dev = container_of(inode->i_cdev, struct m_foo_dev, m_cdev);
+    struct m_device *dev;
+
+    dev = container_of(inode->i_cdev, struct m_device, cdev);
+
     file->private_data = dev;
+
+    pr_info("device opened\n");
+
     return 0;
 }
 
 static int m_release(struct inode *inode, struct file *file)
 {
-    pr_info("Device closed\n");
+    pr_info("device closed\n");
+
     return 0;
 }
 
-static ssize_t m_read(struct file *file, char __user *buf,
-                      size_t len, loff_t *offset)
+/* ================= WRITE ================= */
+
+static ssize_t m_write(struct file *file,
+                       const char __user *buf,
+                       size_t len,
+                       loff_t *offset)
 {
-    /*Write Text To m_cdev file and userspace can read text from /dev/m_cdev "Hello from kernel space!*/
-    // char msg[] = "Hello from kernel space!\n";
-    // size_t msg_len = sizeof(msg);
+    struct m_device *dev = file->private_data;
 
-    // if (*offset >= msg_len)
-    //     return 0;
+    char kbuf[MSG_SIZE];
 
-    // if (copy_to_user(buf, m_classsg, msg_len))
-    //     return -EFAULT;
+    if (len > MSG_SIZE-1)
+        len = MSG_SIZE-1;
 
-    // *offset += msg_len;
-    // return msg_len;
-    /*Userspace write data to Kernel space m_cdev file then read file dev/m_cdev*/
-    
-    struct m_foo_dev *dev = file->private_data;
-    ssize_t ret;
+    if (copy_from_user(kbuf, buf, len))
+        return -EFAULT;
 
-    if (*offset >= dev->size)
-        return 0;
-
-    if (len > dev->size - *offset)
-        len = dev->size - *offset;
+    kbuf[len] = '\0';
 
     mutex_lock(&dev->lock);
 
-    if (copy_to_user(buf, dev->buffer + *offset, len)) {
-        mutex_unlock(&dev->lock);
-        return -EFAULT;
-    }
+    if (rb_push(&dev->rb, kbuf)) {
 
-    *offset += len;
-    ret = len;
+        mutex_unlock(&dev->lock);
+
+        return -ENOMEM;
+    }
 
     mutex_unlock(&dev->lock);
 
-    return ret;
-}
+    wake_up_interruptible(&dev->read_queue);
 
-static ssize_t m_write(struct file *file, const char __user *buf,
-                       size_t len, loff_t *offset)
-{
-    struct m_foo_dev *dev = file->private_data;
-
-    if (len > BUFFER_SIZE)
-        len = BUFFER_SIZE;
-
-    mutex_lock(&dev->lock);
-
-    if (copy_from_user(dev->buffer, buf, len)) {
-        mutex_unlock(&dev->lock);
-        return -EFAULT;
-    }
-
-    dev->size = len;
-
-    mutex_unlock(&dev->lock);
-
-    pr_info("Received %zu bytes from user\n", len);
+    pr_info("push message: %s\n", kbuf);
 
     return len;
 }
 
+/* ================= READ ================= */
+
+static ssize_t m_read(struct file *file,
+                      char __user *buf,
+                      size_t len,
+                      loff_t *offset)
+{
+    struct m_device *dev = file->private_data;
+
+    char kbuf[MSG_SIZE];
+
+    int ret;
+
+    wait_event_interruptible(dev->read_queue,
+                             dev->rb.count > 0);
+
+    mutex_lock(&dev->lock);
+
+    ret = rb_pop(&dev->rb, kbuf);
+
+    mutex_unlock(&dev->lock);
+
+    if (ret < 0)
+        return 0;
+
+    if (copy_to_user(buf, kbuf, ret))
+        return -EFAULT;
+
+    return ret;
+}
+
+/* ================= IOCTL ================= */
+
+static long m_ioctl(struct file *file,
+                    unsigned int cmd,
+                    unsigned long arg)
+{
+    struct m_device *dev = file->private_data;
+
+    int size;
+
+    switch(cmd)
+    {
+
+        case M_IOCTL_CLEAR_BUFFER:
+
+            mutex_lock(&dev->lock);
+
+            dev->rb.head = 0;
+            dev->rb.tail = 0;
+            dev->rb.count = 0;
+
+            mutex_unlock(&dev->lock);
+
+            break;
+
+        case M_IOCTL_GET_SIZE:
+
+            size = dev->rb.count;
+
+            if (copy_to_user((int __user *)arg,
+                             &size,
+                             sizeof(int)))
+                return -EFAULT;
+
+            break;
+
+        default:
+
+            return -EINVAL;
+    }
+
+    return 0;
+}
+
+/* ================= POLL ================= */
+
+static __poll_t m_poll(struct file *file,
+                       poll_table *wait)
+{
+    struct m_device *dev = file->private_data;
+
+    poll_wait(file, &dev->read_queue, wait);
+
+    if (dev->rb.count > 0)
+        return POLLIN | POLLRDNORM;
+
+    return 0;
+}
+
+/* ================= FOPS ================= */
+
 static const struct file_operations fops = {
+
     .owner = THIS_MODULE,
-    .open  = m_open,
+
+    .open = m_open,
+
     .release = m_release,
-    .read  = m_read,
+
+    .read = m_read,
+
     .write = m_write,
+
+    .unlocked_ioctl = m_ioctl,
+
+    .poll = m_poll,
 };
 
-static int __init chdev_init(void)
+/* ================= INIT ================= */
+
+static int __init m_init(void)
 {
     int ret;
 
-    ret = alloc_chrdev_region(&mdev.dev_num, 0, 1, DEVICE_NAME);
+    ret = alloc_chrdev_region(&mdev.dev_num,
+                              0,
+                              1,
+                              DRIVER_NAME);
+
     if (ret)
         return ret;
 
-    cdev_init(&mdev.m_cdev, &fops);
-    mdev.m_cdev.owner = THIS_MODULE;
+    cdev_init(&mdev.cdev, &fops);
 
-    ret = cdev_add(&mdev.m_cdev, mdev.dev_num, 1);
+    ret = cdev_add(&mdev.cdev,
+                   mdev.dev_num,
+                   1);
+
     if (ret)
-        goto err_unregister;
+        goto err;
 
-    mdev.m_class = class_create(DEVICE_NAME);
-    if (IS_ERR(mdev.m_class)) {
-        ret = PTR_ERR(mdev.m_class);
-        goto err_cdev;
-    }
+    mdev.class = class_create(DRIVER_NAME);
 
-    mdev.m_device = device_create(mdev.m_class, NULL, mdev.dev_num, NULL, DEVICE_NAME);
-    if (IS_ERR(mdev.m_device)) {
-        ret = PTR_ERR(mdev.m_device);
-        goto err_class;
-    }
+    mdev.device = device_create(
+                    mdev.class,
+                    NULL,
+                    mdev.dev_num,
+                    NULL,
+                    DRIVER_NAME);
 
     mutex_init(&mdev.lock);
 
-    strcpy(mdev.buffer, "Hello from kernel space\n");
-    mdev.size = strlen(mdev.buffer);
+    init_waitqueue_head(&mdev.read_queue);
 
-    pr_info("Driver loaded successfully\n");
+    mdev.rb.head = 0;
+    mdev.rb.tail = 0;
+    mdev.rb.count = 0;
+
+    pr_info("ring buffer driver loaded\n");
+
     return 0;
 
-err_class:
-    class_destroy(mdev.m_class);
+err:
 
-err_cdev:
-    cdev_del(&mdev.m_cdev);
-
-err_unregister:
     unregister_chrdev_region(mdev.dev_num, 1);
 
     return ret;
 }
 
-static void __exit chdev_exit(void)
+/* ================= EXIT ================= */
+
+static void __exit m_exit(void)
 {
-    device_destroy(mdev.m_class, mdev.dev_num);
-    class_destroy(mdev.m_class);
-    cdev_del(&mdev.m_cdev);
-    unregister_chrdev_region(mdev.dev_num, 1);              /* 1.0 */
-    pr_info("Driver unloaded\n");
+    device_destroy(mdev.class, mdev.dev_num);
+
+    class_destroy(mdev.class);
+
+    cdev_del(&mdev.cdev);
+
+    unregister_chrdev_region(mdev.dev_num, 1);
+
+    pr_info("driver unloaded\n");
 }
 
-module_init(chdev_init);
-module_exit(chdev_exit);
+module_init(m_init);
+
+module_exit(m_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR(DRIVER_AUTHOR);
-MODULE_DESCRIPTION(DRIVER_DESC);
-MODULE_VERSION(DRIVER_VERS);
+MODULE_AUTHOR("Minh");
+MODULE_DESCRIPTION("Ring Buffer Character Driver");
+MODULE_VERSION("1.0");

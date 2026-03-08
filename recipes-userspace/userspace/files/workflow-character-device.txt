@@ -1,0 +1,195 @@
+1. WORKFLOW 
+
+            USER SPACE
+        ┌─────────────────┐
+        │                 │
+        │  read()         │
+        │  write()        │
+        │  poll/select    │
+        │                 │
+        └────────┬────────┘
+                 │
+                 │ system call
+                 ▼
+            KERNEL SPACE
+        ┌─────────────────────┐
+        │ Character Driver    │
+        │                     │
+        │  file_operations    │
+        │                     │
+        │  read()             │
+        │  write()            │
+        │  poll()             │
+        │                     │
+        │  ring buffer        │
+        │                     │
+        │  waitqueue          │
+        └────────┬────────────┘
+                 │
+                 │ interrupt
+                 ▼
+             HARDWARE
+2. Flow when user read 
+                USER SPACE
+        ┌─────────────────┐
+        │                 │
+        │  read()         │
+        │  write()        │
+        │  poll/select    │
+        │                 │
+        └────────┬────────┘
+                 │
+                 │ system call
+                 ▼
+            KERNEL SPACE
+        ┌─────────────────────┐
+        │ Character Driver    │
+        │                     │
+        │  file_operations    │
+        │                     │
+        │  read()             │
+        │  write()            │
+        │  poll()             │
+        │                     │
+        │  ring buffer        │
+        │                     │
+        │  waitqueue          │
+        └────────┬────────────┘
+                 │
+                 │ interrupt
+                 ▼
+             HARDWARE
+3. When has data (Write or interrupt)
+write() or interrupt
+
+        │
+        ▼
+push data into ring buffer
+
+        │
+        ▼
+wake_up_interruptible()
+
+        │
+        ▼
+process is sleeping to being WAKE
+
+4. After Wake
+
+process wakeup
+
+        │
+        ▼
+continue read() 
+
+        │
+        ▼
+rb_pop()
+
+        │
+        ▼
+copy_to_user()
+
+        │
+        ▼
+USER receive data
+
+5. Flow
+          read()
+
+            │
+            ▼
+      buffer empty ?
+         /     \
+       YES      NO
+        │        │
+        ▼        ▼
+   wait_event    rb_pop()
+        │
+        │ sleep
+        ▼
+   wait_queue
+        ▲
+        │
+wake_up │
+        │
+        ▼
+   write() / interrupt
+
+6. Flow with poll
+
+poll()
+
+     │
+     ▼
+driver poll()
+
+     │
+     ▼
+poll_wait()
+
+     │
+     ▼
+buffer empty ?
+
+YES → sleep
+NO  → return POLLIN
+
+7. Example user code
+poll(fds, 1, -1);
+
+read(fd, buf, size);
+
+---Flow---
+poll()
+
+     │
+     ▼
+sleep
+
+driver wake_up()
+
+     │
+     ▼
+poll return
+
+     │
+     ▼
+read()
+
+8. interrupt Driver Flow 
+
+          HARDWARE
+             │
+             │ interrupt
+             ▼
+        ISR handler
+             │
+             ▼
+      read data from device
+             │
+             ▼
+       push into ring buffer
+             │
+             ▼
+       wake_up(waitqueue)
+             │
+             ▼
+       process read() wake
+
+9.  Popular Pattern driver    
+              HARDWARE
+                  │
+              interrupt
+                  │
+                  ▼
+             ISR handler
+                  │
+                  ▼
+            ring buffer
+                  │
+                  ▼
+            wake_up()
+                  │
+                  ▼
+           read()/poll() 

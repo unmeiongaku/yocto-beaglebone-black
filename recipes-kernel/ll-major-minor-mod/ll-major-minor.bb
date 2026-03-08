@@ -11,4 +11,4 @@ SRC_URI = "file://Makefile \
 
 S = "${WORKDIR}"
 
-#KERNEL_MODULE_AUTOLOAD += "hello"
+#KERNEL_MODULE_AUTOLOAD += "ll-major-minor"
