@@ -9,7 +9,6 @@ EXTRA_USERS_PARAMS = "\
     usermod -p '${PASSWD}' root; \
     "
 
-IMAGE_INSTALL:append = " uenv"
 IMAGE_INSTALL:append = " banner"
 
 IMAGE_OVERHEAD_FACTOR = "1.2"
@@ -24,6 +23,7 @@ IMAGE_INSTALL:append = " \
     iw \
     wpa-supplicant \
     wireless-regdb-static \
+    net-tools \
 "
 
 #SSH VSCode server package
@@ -50,11 +50,43 @@ IMAGE_INSTALL:append = " \
     opkg \
     dtc \
     kernel-modules \
+    kernel-dev \
+    kernel-devsrc \
     tree \
     fbset \
     con2fbmap \
 "
 IMAGE_INSTALL:append = " util-linux"
+
+#DEBUG GROUP
+IMAGE_INSTALL:append = " \
+    strace \
+    ltrace \
+    gdb \
+    gdbserver \
+    lsof \
+"
+#filesystem + disk tool
+IMAGE_INSTALL:append = " \
+    e2fsprogs \
+    dosfstools \
+    parted \
+"
+#log system
+IMAGE_INSTALL:append = " \
+    htop \
+    less \
+    file \
+"
+
+IMAGE_INSTALL:append = " \
+    libgpiod \
+    libgpiod-tools \
+"
+
+IMAGE_INSTALL:append = " \
+    spidev-test \
+"
 
 KERNEL_MODULE_AUTOLOAD:append = " \
     rtl8188eu \
@@ -64,6 +96,6 @@ IMAGE_INSTALL:append = " wpa-supplicant iw dhcpcd"
 CORE_IMAGE_EXTRA_INSTALL += " packagegroup-base-wifi kernel-modules"
 
 IMAGE_INSTALL:append = " hello"
-IMAGE_INSTALL:append = " ll-major-minor"
+IMAGE_INSTALL:append = " ll-character-device"
 IMAGE_INSTALL:append = " userspace"
 IMAGE_INSTALL:append = " userwificonnect"

@@ -8,7 +8,9 @@
 #include <linux/poll.h>
 
 #define DRIVER_NAME "m_cdev"
-
+#define DRIVER_AUTHOR "desmtiny nguyenhoangminh@gmail.com"
+#define DRIVER_DESC   "Character Device"
+#define DRIVER_VERS   "1.0"
 /* ring buffer config */
 
 #define RING_SIZE 16
@@ -89,14 +91,14 @@ static int m_open(struct inode *inode, struct file *file)
 
     file->private_data = dev;
 
-    pr_info("device opened\n");
+    pr_info("Device opened\n");
 
     return 0;
 }
 
 static int m_release(struct inode *inode, struct file *file)
 {
-    pr_info("device closed\n");
+    pr_info("Device closed\n");
 
     return 0;
 }
@@ -133,7 +135,7 @@ static ssize_t m_write(struct file *file,
 
     wake_up_interruptible(&dev->read_queue);
 
-    pr_info("push message: %s\n", kbuf);
+    pr_info("Push message: %s\n", kbuf);
 
     return len;
 }
@@ -251,6 +253,8 @@ static const struct file_operations fops = {
 
 static int __init m_init(void)
 {
+    pr_info("Character Device Driver\n");
+
     int ret;
 
     ret = alloc_chrdev_region(&mdev.dev_num,
@@ -314,10 +318,9 @@ static void __exit m_exit(void)
 }
 
 module_init(m_init);
-
 module_exit(m_exit);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Minh");
-MODULE_DESCRIPTION("Ring Buffer Character Driver");
-MODULE_VERSION("1.0");
+MODULE_AUTHOR(DRIVER_AUTHOR);
+MODULE_DESCRIPTION(DRIVER_DESC);  
+MODULE_VERSION(DRIVER_VERS);

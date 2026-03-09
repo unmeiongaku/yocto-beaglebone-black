@@ -1,4 +1,4 @@
-obj-m := ll-major-minor.o
+obj-m := ll-character-device.o
 
 SRC := $(shell pwd)
 
