@@ -1,0 +1,9 @@
+config BNO055
+    tristate "Bosch BNO055 IMU"
+
+    depends on I2C
+    select IIO
+    select REGMAP_I2C
+
+    help
+      Driver for Bosch BNO055 IMU sensor
