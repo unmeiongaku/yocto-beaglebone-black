@@ -10,4 +10,4 @@ SRC_URI = "file://bno055_iio.c \
            file://Makefile"
 
 S = "${WORKDIR}"
-#KERNEL_MODULE_AUTOLOAD += "ll-character-device"
+#KERNEL_MODULE_AUTOLOAD += "bno055_iio"

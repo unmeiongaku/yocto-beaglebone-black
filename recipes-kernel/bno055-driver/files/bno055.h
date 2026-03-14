@@ -1,5 +1,5 @@
-#ifndef _BNO055_REGMAP_H_
-#define _BNO055_REGMAP_H_
+#ifndef _BNO055_H_
+#define _BNO055_H_
 
 #define BNO055_CHIP_ID_VAL			    0xA0
 #define BNO055_I2C_ADDR				    0x28
@@ -211,4 +211,75 @@
 #define BNO055_UNIT_WIN_FORMAT			    (0x0 << 7)
 #define BNO055_UNIT_ANDROID_FORMAT		    (0x1 << 7)
 
-#endif /* BNO055_REGISTERS_MAP_H_ */
+
+enum bno055_opr_mode{
+	//Config Mode
+	BNO055_OPR_MODE_CONFIG   		= 0x00,			//0
+	// Non Fusion Mode
+	BNO055_OPR_MODE_ACCONLY  		= 0x01,		//1
+	BNO055_OPR_MODE_MAGONLY  		= 0x02,			//2
+	BNO055_OPR_MODE_GYROONLY 		= 0x03,			//3
+	BNO055_OPR_MODE_ACCMAG			= 0x04,				//4
+	BNO055_OPR_MODE_ACCGYRO			= 0x05,			//5
+	BNO055_OPR_MODE_MAGGYRO			= 0x06,			//6
+	BNO055_OPR_MODE_AMG				= 0x07,				//7
+	//Fusion Mode
+	BNO055_OPR_MODE_IMU 			= 0x08,				//8
+	BNO055_OPR_MODE_COMPASS 		= 0x09,		//9
+	BNO055_OPR_MODE_M4G 			= 0x0A,			//10
+	BNO055_OPR_MODE_NDOF_FMC_OFF 	= 0x0B,	//11
+	BNO055_OPR_MODE_NDOF 			= 0x0C,			//12
+};
+
+enum bno055_fusion_output {
+	BNO055_FUSION_OUTPUT_WINDOWS = 0x0 << 7,
+	BNO055_FUSION_OUTPUT_ANDROID = 0x1 << 7,
+};
+
+enum bno055_axis_remap_config {
+	BNO055_AXIS_REMAP_P0 = 0x21,
+	BNO055_AXIS_REMAP_P1 = 0x24, // default
+};
+
+enum bno055_axis_remap_sign {
+	BNO055_AXIS_SIGN_P0 = 0x04,
+	BNO055_AXIS_SIGN_P1 = 0x00, // default
+	BNO055_AXIS_SIGN_P2 = 0x06,
+	BNO055_AXIS_SIGN_P3 = 0x02,
+	BNO055_AXIS_SIGN_P4 = 0x03,
+	BNO055_AXIS_SIGN_P5 = 0x01,
+	BNO055_AXIS_SIGN_P6 = 0x07,
+	BNO055_AXIS_SIGN_P7 = 0x05,
+};
+
+enum bno055_power_mode {
+	BNO055_POWER_NORMAL = 0x00,
+	BNO055_POWER_LOW = 0x01,
+	BNO055_POWER_SUSPEND = 0x02,
+};
+enum bno055_temp_source {
+	BNO055_TEMP_SRC_ACCEL = 0x00,
+	BNO055_TEMP_SRC_GYRO = 0x01,
+};
+
+enum bno055_page_id{
+	PAGE_ID_0 = 0,
+	PAGE_ID_1 = 1,
+};
+
+struct bno055_state {
+	struct regmap *regmap;
+	struct mutex lock;
+	/*BNO_CONFIG*/
+	enum bno055_opr_mode opr_mode;
+	enum bno055_axis_remap_config axis_map_config;
+	enum bno055_axis_remap_sign axis_remap_sign;
+	enum bno055_power_mode power_mode;
+	enum bno055_temp_source temp_source;
+	enum bno055_page_id page_id;
+};
+
+int bno055_probe(struct i2c_client *client);
+void bno055_remove(struct i2c_client *client);
+
+#endif /* BNO055_H_ */
