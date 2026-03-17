@@ -1,7 +1,7 @@
 #ifndef _BNO055_H_
 #define _BNO055_H_
 
-#define BNO055_CHIP_ID_VAL			    0xA0
+#define BNO055_CHIP_ID			    	0xA0
 #define BNO055_I2C_ADDR				    0x28
 
 /* Page 0 registers */
@@ -117,6 +117,7 @@
 
 /* SYS_TRIGGER bits */
 
+#define BNO055_SYS_DEFAULT_SYSTEM		0x00
 #define BNO055_SYS_TRIGGER_CLK_SEL		0x80
 #define BNO055_SYS_TRIGGER_RST_INT		0x40
 #define BNO055_SYS_TRIGGER_RST_SYS		0x20
@@ -212,7 +213,7 @@
 #define BNO055_UNIT_ANDROID_FORMAT		    (0x1 << 7)
 
 
-enum bno055_opr_mode{
+enum bno055_opr_mode_t{
 	//Config Mode
 	BNO055_OPR_MODE_CONFIG   		= 0x00,			//0
 	// Non Fusion Mode
@@ -231,17 +232,17 @@ enum bno055_opr_mode{
 	BNO055_OPR_MODE_NDOF 			= 0x0C,			//12
 };
 
-enum bno055_fusion_output {
+enum bno055_fusion_output_t{
 	BNO055_FUSION_OUTPUT_WINDOWS = 0x0 << 7,
 	BNO055_FUSION_OUTPUT_ANDROID = 0x1 << 7,
 };
 
-enum bno055_axis_remap_config {
+enum bno055_axis_remap_config_t{
 	BNO055_AXIS_REMAP_P0 = 0x21,
 	BNO055_AXIS_REMAP_P1 = 0x24, // default
 };
 
-enum bno055_axis_remap_sign {
+enum bno055_axis_remap_sign_t{
 	BNO055_AXIS_SIGN_P0 = 0x04,
 	BNO055_AXIS_SIGN_P1 = 0x00, // default
 	BNO055_AXIS_SIGN_P2 = 0x06,
@@ -252,32 +253,46 @@ enum bno055_axis_remap_sign {
 	BNO055_AXIS_SIGN_P7 = 0x05,
 };
 
-enum bno055_power_mode {
+enum bno055_power_mode_t{
 	BNO055_POWER_NORMAL = 0x00,
 	BNO055_POWER_LOW = 0x01,
 	BNO055_POWER_SUSPEND = 0x02,
 };
-enum bno055_temp_source {
+enum bno055_temp_source_t{
 	BNO055_TEMP_SRC_ACCEL = 0x00,
 	BNO055_TEMP_SRC_GYRO = 0x01,
 };
 
-enum bno055_page_id{
+enum bno055_page_id_t{
 	PAGE_ID_0 = 0,
 	PAGE_ID_1 = 1,
 };
 
-struct bno055_state {
+struct bno055_id_t{
+	enum bno055_page_id_t page_id;
+	u8 bl_rev_id;
+	u8 SW_REV_ID_LSB;
+	u8 SW_REV_ID_MSB;
+	u8 GYR_ID;
+	u8 MAG_ID;
+	u8 ACC_ID;
+	u8 CHIP_ID;
+	u8 IIC_DEV;
+}
+
+
+struct bno055_state_t{
 	struct regmap *regmap;
 	struct mutex lock;
 	/*BNO_CONFIG*/
-	enum bno055_opr_mode opr_mode;
-	enum bno055_axis_remap_config axis_map_config;
-	enum bno055_axis_remap_sign axis_remap_sign;
-	enum bno055_power_mode power_mode;
-	enum bno055_temp_source temp_source;
-	enum bno055_page_id page_id;
+	enum bno055_opr_mode_t opr_mode;
+	enum bno055_axis_remap_config_t axis_map_config;
+	enum bno055_axis_remap_sign_t axis_remap_sign;
+	enum bno055_power_mode_t power_mode;
+	enum bno055_temp_source_t temp_source;
+	enum bno055_id_t id;
 };
+
 
 int bno055_probe(struct i2c_client *client);
 void bno055_remove(struct i2c_client *client);
