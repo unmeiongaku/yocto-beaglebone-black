@@ -1,5 +1,14 @@
 config BNO055
-	tristate "Bosch BNO055 IMU"
-	depends on I2C && IIO
+	tristate "Bosch BNO055 IMU sensor"
+	depends on I2C
+	select IIO
+	select IIO_BUFFER
+	select IIO_TRIGGERED_BUFFER
 	help
-	  Driver for Bosch BNO055 IMU sensor
+	  Say yes here to build support for the Bosch BNO055
+	  9-axis absolute orientation sensor.
+
+	  This driver supports accelerometer, gyroscope,
+	  magnetometer and fusion data via IIO subsystem.
+
+	  To compile this driver as a module, choose M here.

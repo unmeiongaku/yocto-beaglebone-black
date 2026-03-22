@@ -14,34 +14,130 @@
 #define DRIVER_DESC   "BoshBosch BNO055 IMU Driver"
 #define DRIVER_VERS   "1.0"
 
-static int bno055_set_page_id(struct bno055_state_t *st, enum bno055_page_id_t tar_page_id);
-static int bno055_set_opr_mode(struct bno055_state_t *st,enum bno055_opr_mode_t opr_mode);
-static int bno055_chip_init(struct bno055_state_t *st);
-static int bno_read_chip_id(struct bno055_state_t *st);
 
-static int bno055_set_page_id(struct bno055_state_t *st,
+static int bno055_get_chip_id(struct bno055_priv *priv);
+static int bno055_set_page_id(struct bno055_priv *priv, enum bno055_page_id_t tar_page_id);
+static int bno055_set_opr_mode(struct bno055_priv *priv,enum bno055_opr_mode_t opr_mode);
+static int bno055_init(struct bno055_priv *priv);
+static int bno055_system_reset(struct bno055_priv *priv);
+
+/* ================= MODE TABLE ================= */
+static const struct bno055_mode_map bno055_modes[] = {
+	{ "CONFIG", BNO055_OPR_MODE_CONFIG },
+	{ "ACCONLY", BNO055_OPR_MODE_ACCONLY },
+	{ "MAGONLY", BNO055_OPR_MODE_MAGONLY },
+	{ "GYRONLY", BNO055_OPR_MODE_GYROONLY },
+	{ "ACCMAG", BNO055_OPR_MODE_ACCMAG },
+	{ "ACCGYRO", BNO055_OPR_MODE_ACCGYRO },
+	{ "MAGGYRO", BNO055_OPR_MODE_MAGGYRO },
+	{ "AMG", BNO055_OPR_MODE_AMG },
+	{ "IMU", BNO055_OPR_MODE_IMU },
+	{ "COMPASS", BNO055_OPR_MODE_COMPASS },
+	{ "M4G", BNO055_OPR_MODE_M4G },
+	{ "NDOF_FMC_OFF", BNO055_OPR_MODE_NDOF_FMC_OFF },
+	{ "NDOF", BNO055_OPR_MODE_NDOF },
+};
+
+/*IIO channel*/
+
+/* =========================
+ * Macro define channel
+ * ========================= */
+//in_<type>_<axis>_<info>
+
+#define BNO055_CHANNEL(_type, _axis, _index, _address, _sep, _sh, _avail) {	\
+	.address = _address,							\
+	.type = _type,								\
+	.modified = 1,								\
+	.channel2 = IIO_MOD_##_axis,						\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) | (_sep),			\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) | (_sh),		\
+	.info_mask_shared_by_type_available = _avail,				\
+	.scan_index = _index,							\
+	.scan_type = {								\
+		.sign = 's',							\
+		.realbits = 16,							\
+		.storagebits = 16,						\
+		.endianness = IIO_LE,						\
+		.repeat = IIO_MOD_##_axis == IIO_MOD_QUATERNION ? 4 : 0,        \
+	},									\
+}
+
+
+/* scan indexes follow DATA register order */
+enum bno055_scan_axis {
+	BNO055_SCAN_ACCEL_X,
+	BNO055_SCAN_ACCEL_Y,
+	BNO055_SCAN_ACCEL_Z,
+	BNO055_SCAN_MAGN_X,
+	BNO055_SCAN_MAGN_Y,
+	BNO055_SCAN_MAGN_Z,
+	BNO055_SCAN_GYRO_X,
+	BNO055_SCAN_GYRO_Y,
+	BNO055_SCAN_GYRO_Z,
+	BNO055_SCAN_YAW,
+	BNO055_SCAN_ROLL,
+	BNO055_SCAN_PITCH,
+	BNO055_SCAN_QUATERNION,
+	BNO055_SCAN_LIA_X,
+	BNO055_SCAN_LIA_Y,
+	BNO055_SCAN_LIA_Z,
+	BNO055_SCAN_GRAVITY_X,
+	BNO055_SCAN_GRAVITY_Y,
+	BNO055_SCAN_GRAVITY_Z,
+	BNO055_SCAN_TIMESTAMP,
+	_BNO055_SCAN_MAX
+};
+/* =========================
+ * Channel definitions
+ * ========================= */
+
+static const struct iio_chan_spec bno055_channels[] = {
+	/* ================= accelerometer  ================= */
+	
+
+
+	/* ================= ACCEL ================= */
+	// BNO055_CHAN(IIO_ACCEL, IIO_MOD_X, BNO055_REG_ACC_DATA_X_LSB),
+	// BNO055_CHAN(IIO_ACCEL, IIO_MOD_Y, BNO055_REG_ACC_DATA_Y_LSB),
+	// BNO055_CHAN(IIO_ACCEL, IIO_MOD_Z, BNO055_REG_ACC_DATA_Z_LSB),
+	// /* ================= GYRO ================= */
+	// BNO055_CHAN(IIO_ANGL_VEL, IIO_MOD_X, BNO055_REG_GYR_DATA_X_LSB),
+	// BNO055_CHAN(IIO_ANGL_VEL, IIO_MOD_Y, BNO055_REG_GYR_DATA_Y_LSB),
+	// BNO055_CHAN(IIO_ANGL_VEL, IIO_MOD_Z, BNO055_REG_GYR_DATA_Z_LSB),
+	// /* ================= MAG ================= */
+	// BNO055_CHAN(IIO_MAGN, IIO_MOD_X, BNO055_REG_MAG_DATA_X_LSB),
+	// BNO055_CHAN(IIO_MAGN, IIO_MOD_Y, BNO055_REG_MAG_DATA_Y_LSB),
+	// BNO055_CHAN(IIO_MAGN, IIO_MOD_Z, BNO055_REG_MAG_DATA_Z_LSB),
+};
+
+
+#define BNO055_NUM_CHANNELS ARRAY_SIZE(bno055_channels)
+
+/*SET Page ID*/
+static int bno055_set_page_id(struct bno055_priv *priv,
 			      enum bno055_page_id_t tar_page_id)
 {
 	int ret;
 	unsigned int pageid;
-	ret = regmap_read(st->regmap, BNO055_REG_PAGE_ID, &pageid);
+	ret = regmap_read(priv->regmap, BNO055_REG_PAGE_ID, &pageid);
 	if (ret) {
-		dev_err(st->dev, "Failed to read page id\n");
+		//dev_err(st->dev, "Failed to read page id\n");
 		goto out;
 	}
 
 	if (pageid != tar_page_id) {
 
-		ret = regmap_write(st->regmap, BNO055_REG_PAGE_ID,
+		ret = regmap_write(priv->regmap, BNO055_REG_PAGE_ID,
 				   tar_page_id);
 		if (ret) {
-			dev_err(st->dev, "Failed to set page id\n");
+			//dev_err(st->dev, "Failed to set page id\n");	
 			goto out;
 		}
 
-		st->id.page_id = tar_page_id;
+		priv->id.page_id = tar_page_id;
 
-		dev_info(st->dev, "Changed to page %u\n", tar_page_id);
+		//dev_info(st->dev, "Changed to page %u\n", tar_page_id);
 	}
 
 	ret = 0;
@@ -49,16 +145,62 @@ static int bno055_set_page_id(struct bno055_state_t *st,
 out:
 	return ret;
 }
+/*Read Chip ID*/
+static int bno055_get_chip_id(struct bno055_priv *priv){	
+	int ret;
+	bno055_set_page_id(priv,PAGE_ID_0);
+	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_LSB, &priv->id.SW_REV_ID_LSB);
+		if (ret)
+			return ret;
+	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_MSB, &priv->id.SW_REV_ID_MSB);
+		if (ret)
+			return ret;
+	if (priv->id.SW_REV_ID_MSB != 0x3 || priv->id.SW_REV_ID_LSB != 0x11)
+		dev_warn(dev, "Untested firmware version. Anglvel scale may not work as expected\n");
+	/*Read ACC_ID*/
+	ret = regmap_read(priv->regmap, BNO055_REG_ACC_ID, &priv->id.ACC_ID);
+		if (ret)
+		return ret;
+	/*Read GYR_ID*/
+	ret = regmap_read(priv->regmap, BNO055_REG_GYR_ID, &priv->id.GYR_ID);
+		if (ret)
+		return ret;
+	/*Read MAG_ID*/
+	ret = regmap_read(priv->regmap, BNO055_REG_MAG_ID, &priv->id.MAG_ID);
+		if (ret)
+		return ret;
+	/*BL_REV*/
+	ret = regmap_read(priv->regmap, BNO055_REG_BL_REV_ID, &priv->id.bl_rev_id);
+		if (ret)
+		return ret;
+	dev_info(dev, "=== BNO055 Chip Info ===\n");
 
-static int bno055_set_opr_mode(struct bno055_state_t *st,
+	dev_info(dev, "SW Revision: 0x%02X 0x%02X\n",
+		 priv->id.SW_REV_ID_MSB,
+		 priv->id.SW_REV_ID_LSB);
+	dev_info(dev, "CHIP ID    : 0x%02X\n", priv->id.CHIP_ID);
+	dev_info(dev, "ACC ID     : 0x%02X\n", priv->id.ACC_ID);
+	dev_info(dev, "GYR ID     : 0x%02X\n", priv->id.GYR_ID);
+	dev_info(dev, "MAG ID     : 0x%02X\n", priv->id.MAG_ID);
+
+	dev_info(dev, "Bootloader : 0x%02X\n", priv->id.bl_rev_id);
+
+	dev_info(dev, "========================\n");
+	return ret;
+}
+
+
+
+/* ================= SET MODE ================= */
+static int bno055_set_opr_mode(struct bno055_priv *priv,
 			      enum bno055_opr_mode_t opr_mode)
 {
 	int ret;
 	int cur_mode;
 	/*check current opr mode*/
-	ret = regmap_read(st->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if(ret){
-		dev_err(st->dev, "Failed to read current Mode\n");
+		dev_err(priv->dev, "Failed to read current Mode\n");
 		return ret;
 	}
 	/* Already in target mode */
@@ -68,121 +210,212 @@ static int bno055_set_opr_mode(struct bno055_state_t *st,
 	/* Move to CONFIGMODE first if not already */
 	if(cur_mode!=BNO055_OPR_MODE_CONFIG){
 		int cfg_mode = BNO055_OPR_MODE_CONFIG;
-		ret = regmap_write(st->regmap, BNO055_REG_OPR_MODE,cfg_mode);
+		ret = regmap_write(priv->regmap, BNO055_REG_OPR_MODE,cfg_mode);
 		if(ret){
-			dev_err(st->dev, "Failed to Set Config Mode\n");
+			dev_err(priv->dev, "Failed to Set Config Mode\n");
 			return ret;
 		}
 		msleep(20);
 	}
 	/* If target is CONFIGMODE we're done */
 	if (opr_mode == BNO055_OPR_MODE_CONFIG) {
-		st->opr_mode = opr_mode;
+		priv->opr_mode = opr_mode;
 		return 0;
 	}
 	/* Set target mode */
-	ret = regmap_write(st->regmap, BNO055_REG_OPR_MODE, opr_mode);
+	ret = regmap_write(priv->regmap, BNO055_REG_OPR_MODE, opr_mode);
 	if (ret)
 		return ret;
 
 	msleep(20);
 
 	/* Verify mode */
-	ret = regmap_read(st->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if (ret)
 		return ret;
 	if (cur_mode != opr_mode)
 		return -EIO;
-	st->opr_mode = opr_mode;
-	return 0;
+	priv->opr_mode = opr_mode;
+	return ret;
 }
 
-static int bno055_chip_init(struct bno055_state_t *st)
+/* ================= SYSFS MODE ================= */
+static ssize_t bno055_mode_show(struct device *dev,
+				struct device_attribute *attr,
+				char *buf)
 {
-	int ret;
-	unsigned int val;
+	struct bno055_priv *priv = dev_get_drvdata(dev);
+	int i;
 
-	ret = regmap_read(st->regmap, BNO055_CHIP_ID, &val);
+	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++)
+		if (bno055_modes[i].val == priv->opr_mode)
+			return sprintf(buf, "%s\n", bno055_modes[i].name);
+
+	return sprintf(buf, "UNKNOWN\n");
+}
+
+
+static ssize_t bno055_mode_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct bno055_priv *priv = dev_get_drvdata(dev);
+	int i, ret;
+
+	mutex_lock(&st->lock);
+
+	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++) {
+		if (sysfs_streq(buf, bno055_modes[i].name)) {
+			ret = bno055_set_opr_mode(st,
+						 bno055_modes[i].val);
+			mutex_unlock(&st->lock);
+			return ret ? ret : count;
+		}
+	}
+
+	mutex_unlock(&st->lock);
+	return -EINVAL;
+}
+
+static DEVICE_ATTR_RW(bno055_mode);
+
+/* ================= READ RAW ================= */
+static int bno055_read_axis(struct bno055_priv *priv,
+			   u8 reg, int *val)
+{
+	u8 data[2];
+	int ret;
+
+	ret = regmap_bulk_read(st->regmap, reg, data, 2);
 	if (ret)
 		return ret;
 
-	if (val != BNO055_CHIP_ID_VALUE) {
-		dev_err(st->dev, "Invalid chip id 0x%x\n", val);
-		return -ENODEV;
+	*val = (s16)((data[1] << 8) | data[0]);
+	return 0;
+}
+
+
+static int bno055_read_raw(struct iio_dev *indio_dev,
+			   struct iio_chan_spec const *chan,
+			   int *val, int *val2, long mask)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+
+	switch (mask) {
+
+	case IIO_CHAN_INFO_RAW:
+		mutex_lock(&st->lock);
+		ret = bno055_read_axis(st, chan->address, val);
+		mutex_unlock(&st->lock);
+		if (ret)
+			return ret;
+
+		return IIO_VAL_INT;
+
+	case IIO_CHAN_INFO_SCALE:
+		switch (chan->type) {
+
+		case IIO_ACCEL:
+			*val = 0;
+			*val2 = 9800; /* mg */
+			return IIO_VAL_INT_PLUS_MICRO;
+
+		case IIO_ANGL_VEL:
+			*val = 0;
+			*val2 = 87266; /* rad/s */
+			return IIO_VAL_INT_PLUS_MICRO;
+
+		case IIO_MAGN:
+			*val = 0;
+			*val2 = 1000;
+			return IIO_VAL_INT_PLUS_MICRO;
+
+		default:
+			return -EINVAL;
+		}
 	}
 
-	dev_info(st->dev, "BNO055 detected\n");
+	return -EINVAL;
+}
 
-	st->id.page_id = PAGE_ID_0;
 
-	ret = regmap_write(st->regmap, BNO055_REG_PAGE_ID,
-			   st->id.page_id);
-	if (ret) {
-		dev_err(st->dev, "Failed to set default page\n");
+static int bno055_system_reset(struct bno055_priv *priv){
+	priv->id.page_id = PAGE_ID_0;
+	// ret = regmap_write(priv->regmap, BNO055_REG_PAGE_ID,
+	// 		priv->id.page_id);
+	bno055_set_page_id(priv,PAGE_ID_0);
+	dev_info(priv->dev, "Reset BNO055 Device: ");
+	int tmp = BNO055_SYS_TRIGGER_RST_SYS;	
+	ret = regmap_write(priv->regmap, BNO055_REG_SYS_TRIGGER,tmp);	if(ret){
+	dev_err(priv->dev, "Reset Failed\n");
 		return ret;
 	}
-
-	/*Reset CHip*/
-	if(st->id.page_id != PAGE_ID_0) bno055_set_page_id(st,PAGE_ID_0);
-	int tmp = BNO055_SYS_TRIGGER_RST_SYS;
-	dev_info(st->dev, "Reset BNO055 Device: ");
-	ret = regmap_write(st->regmap, BNO055_REG_SYS_TRIGGER,tmp);
-	if(ret){
-		dev_err(st->dev, "Reset Failed\n");
-		return ret;
-	}
-	msleep(600);
-
+	regcache_drop_region(priv->regmap, 0x0, 0xff);
+	usleep_range(650000, 700000);
 	//set BNO055_REG_SYS_TRIGGER TO 0x00
 	tmp = BNO055_SYS_DEFAULT_SYSTEM;
 	ret = regmap_write(st->regmap, BNO055_REG_SYS_TRIGGER,tmp);
 	if(ret){
-		dev_err(st->dev, "Reset Failed\n");
+		dev_err(priv->dev, "Reset Failed\n");
 		return ret;
 	}
-	dev_info(st->dev, "Success\n");
-	msleep(50);
-
+	dev_info(priv->dev, "Success\n");
+	usleep_range(55000, 60000);
 	/*Set Operation Mode to CONFIG Mode*/
-	dev_info(st->dev, "Set Operation Mode: CONFIG_MODE");
-	if(bno055_set_opr_mode(st,BNO055_OPERATION_CONFIG_MODE)!=0){
-		dev_err(st->dev, "Failed\n");
-		return -1;
-	}
-	dev_info(st->dev, "Success\n");
+	dev_info(priv->dev, "Set Operation Mode: CONFIG_MODE");
+	ret = bno055_set_opr_mode(priv,BNO055_OPR_MODE_CONFIG);
+	return ret;
+}
 
+static int bno055_init(struct bno055_priv *priv)
+{
 	
-
-
-	dev_dbg(st->dev, "BNO055 default initialization done\n");
 	return 0;
 }
 
-int bno055_probe(struct i2c_client *client)
+/* ================= IIO INFO ================= */
+static const struct iio_info bno055_info = {
+	
+};
+
+
+int bno055_probe(struct device *dev, struct regmap *regmap)
 {
-	struct iio_dev *indio_dev;
-	struct bno055_state_t *st;
-	int chip_id;
+	struct bno055_priv *priv;
+	struct iio_dev *iio_dev;
 	int ret;
-    indio_dev = devm_iio_device_alloc(&client->dev, sizeof(*st));
-	if (!indio_dev)
+	iio_dev = devm_iio_device_alloc(dev, sizeof(*priv));
+	if (!iio_dev)
 		return -ENOMEM;
-	st = iio_priv(indio_dev);
-	mutex_init(&st->lock);
-	st->regmap = devm_regmap_init_i2c(client, NULL);
-	if (IS_ERR(st->regmap))
-	return PTR_ERR(st->regmap);
-	ret = bno055_chip_init(st);
+	iio_dev->name = DRIVER_NAME;
+	priv = iio_priv(iio_dev);
+	mutex_init(&priv->lock);
+	priv->regmap = regmap;
+	priv->dev = dev;
+	ret = regmap_read(priv->regmap, BNO055_REG_CHIP_ID, &priv->id.CHIP_ID);
 	if (ret)
 		return ret;
+	if(priv->id.CHIP_ID!=BNO055_CHIP_ID){
+		dev_warn(dev, "Unrecognized chip ID 0x%x\n", priv->id.CHIP_ID);
+		return -ENODEV;
+	}
+	else{
+		dev_info(dev, "BNO055 detected\n");
+	}
+	/*Reset*/
+	ret = bno055_system_reset(priv);
+	if(ret) return ret;
+	/*Read chip ID*/
+	ret = bno055_get_chip_id(priv);
+	if(ret) return ret;
+	/*Bno055 Init*/
 	
-
 }
 
-void bno055_remove(struct i2c_client *client)
+void bno055_remove(struct device *dev, struct regmap *regmap)
 {
-	dev_info(dev, "BNO055 removed\n");
-	return 0;
+
 }
 
 MODULE_LICENSE("GPL");

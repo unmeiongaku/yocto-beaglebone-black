@@ -270,19 +270,29 @@ enum bno055_page_id_t{
 
 struct bno055_id_t{
 	enum bno055_page_id_t page_id;
-	u8 bl_rev_id;
-	u8 SW_REV_ID_LSB;
-	u8 SW_REV_ID_MSB;
-	u8 GYR_ID;
-	u8 MAG_ID;
-	u8 ACC_ID;
-	u8 CHIP_ID;
-	u8 IIC_DEV;
-}
+	unsigned int bl_rev_id;
+	unsigned int SW_REV_ID_LSB;
+	unsigned int SW_REV_ID_MSB;
+	unsigned int GYR_ID;
+	unsigned int MAG_ID;
+	unsigned int ACC_ID;
+	unsigned int CHIP_ID;
+	unsigned int IIC_DEV;
+};
 
+struct bno055_scale {
+	int accel;     // micro scale
+	int gyro;
+	int mag;
+	int euler;
+	int qua;
+	int temp;
+};
 
-struct bno055_state_t{
+/* ================= STATE ================= */
+struct bno055_priv{
 	struct regmap *regmap;
+	struct device *dev;
 	struct mutex lock;
 	/*BNO_CONFIG*/
 	enum bno055_opr_mode_t opr_mode;
@@ -290,7 +300,14 @@ struct bno055_state_t{
 	enum bno055_axis_remap_sign_t axis_remap_sign;
 	enum bno055_power_mode_t power_mode;
 	enum bno055_temp_source_t temp_source;
-	enum bno055_id_t id;
+	struct bno055_id_t id;
+	struct bno055_scale scale;
+};
+
+/* ================= MODE TABLE ================= */
+struct bno055_mode_map {
+	const char *name;
+	u8 val;
 };
 
 
