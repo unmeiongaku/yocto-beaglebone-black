@@ -16,8 +16,14 @@
 
 
 static int bno055_get_chip_id(struct bno055_priv *priv);
-static int bno055_set_page_id(struct bno055_priv *priv, enum bno055_page_id_t tar_page_id);
-static int bno055_set_opr_mode(struct bno055_priv *priv,enum bno055_opr_mode_t opr_mode);
+static int bno055_set_page_id(struct bno055_priv *priv, enum bno055_page_id tar_page_id);
+static int bno055_set_opr_mode(struct bno055_priv *priv,enum bno055_opr_mode opr_mode);
+
+/*Config Function*/
+static int bno_axis_remap_config(struct bno055_priv *priv,enum bno055_axis_remap_config  axis_remap_config);
+static int bno_axis_remap_sign(struct bno055_priv *priv,enum bno055_axis_remap_sign  axis_remap_sign);
+static int bno_axis_pwr_mode(struct bno055_priv *priv,enum bno055_power_mode  power_mode);
+
 static int bno055_init(struct bno055_priv *priv);
 static int bno055_system_reset(struct bno055_priv *priv);
 
@@ -116,7 +122,7 @@ static const struct iio_chan_spec bno055_channels[] = {
 
 /*SET Page ID*/
 static int bno055_set_page_id(struct bno055_priv *priv,
-			      enum bno055_page_id_t tar_page_id)
+			      enum bno055_page_id tar_page_id)
 {
 	int ret;
 	unsigned int pageid;
@@ -193,7 +199,7 @@ static int bno055_get_chip_id(struct bno055_priv *priv){
 
 /* ================= SET MODE ================= */
 static int bno055_set_opr_mode(struct bno055_priv *priv,
-			      enum bno055_opr_mode_t opr_mode)
+			      enum bno055_opr_mode opr_mode)
 {
 	int ret;
 	int cur_mode;
@@ -355,7 +361,7 @@ static int bno055_system_reset(struct bno055_priv *priv){
 	usleep_range(650000, 700000);
 	//set BNO055_REG_SYS_TRIGGER TO 0x00
 	tmp = BNO055_SYS_DEFAULT_SYSTEM;
-	ret = regmap_write(st->regmap, BNO055_REG_SYS_TRIGGER,tmp);
+	ret = regmap_write(priv->regmap, BNO055_REG_SYS_TRIGGER,tmp);
 	if(ret){
 		dev_err(priv->dev, "Reset Failed\n");
 		return ret;
@@ -368,10 +374,175 @@ static int bno055_system_reset(struct bno055_priv *priv){
 	return ret;
 }
 
+/*CONFIG FUNCTION*/
+static int bno_axis_remap_config(struct bno055_priv *priv,enum bno055_axis_remap_config  axis_remap_config){
+	int ret;
+	bno055_set_page_id(priv,PAGE_ID_0);
+	int = tmp;
+	switch(axis_remap_config){
+		case REMAP_CONFIG_P0_3_5_6:
+			tmp = REMAP_CONFIG_P0_3_5_6;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_CONFIG,tmp);
+			break;
+		case REMAP_CONFIG_P1_2_4_7:
+			tmp = REMAP_CONFIG_P1_2_4_7;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_CONFIG,tmp);
+			break;
+	}
+	return ret;
+}
+
+static int bno_axis_remap_sign(struct bno055_priv *priv,enum bno055_axis_remap_sign  axis_remap_sign){
+	int ret;
+	bno055_set_page_id(priv,PAGE_ID_0);
+	int = tmp;
+	switch(axis_remap_sign){
+		case BNO055_AXIS_SIGN_P0:
+			tmp = BNO055_AXIS_SIGN_P0;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+		case BNO055_AXIS_SIGN_P1:
+			tmp = BNO055_AXIS_SIGN_P1;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+		case BNO055_AXIS_SIGN_P2:
+			tmp = BNO055_AXIS_SIGN_P2;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+		case BNO055_AXIS_SIGN_P3:
+			tmp = BNO055_AXIS_SIGN_P3;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+		case BNO055_AXIS_SIGN_P4:
+			tmp = BNO055_AXIS_SIGN_P4;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+		case BNO055_AXIS_SIGN_P5:
+			tmp = BNO055_AXIS_SIGN_P5;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+		case BNO055_AXIS_SIGN_P6:
+			tmp = BNO055_AXIS_SIGN_P6;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+		case BNO055_AXIS_SIGN_P7:
+			tmp = BNO055_AXIS_SIGN_P7;
+			ret = regmap_write(priv->regmap, BNO055_REG_AXIS_MAP_SIGN,tmp);
+			break;
+	}
+	return ret;
+}
+
+static int bno_axis_pwr_mode(struct bno055_priv *priv,enum bno055_power_mode  power_mode){
+	int ret;
+	bno055_set_page_id(priv,PAGE_ID_0);
+	int tmp;
+	switch(power_mode){
+		case BNO055_POWER_NORMAL:
+			tmp = BNO055_POWER_NORMAL;
+			ret = regmap_write(priv->regmap, BNO055_REG_PWR_MODE,tmp);
+			break;
+		case BNO055_POWER_LOW:
+			tmp = BNO055_POWER_LOW;
+			ret = regmap_write(priv->regmap, BNO055_REG_PWR_MODE,tmp);
+			break;
+		case BNO055_POWER_SUSPEND:
+			tmp = BNO055_POWER_SUSPEND;
+			ret = regmap_write(priv->regmap, BNO055_REG_PWR_MODE,tmp);
+			break;	
+	}
+	return ret;
+}
+
+/*acceleration configuration*/
+static int bno_acc_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode ){
+	int ret;
+	bno055_set_page_id(priv,PAGE_ID_1);
+	int tmp;
+	priv->acc_gyr_mag_valuation.acc_g_range = g_range;
+	priv->acc_gyr_mag_valuation.acc_bandwidth = Bandwidth;
+	priv->acc_gyr_mag_valuation.acc_mode = OPRMode;
+	int tmp;
+	tmp = (priv->acc_gyr_mag_valuation.acc_mode | priv->acc_gyr_mag_valuation.acc_bandwidth)| priv->acc_gyr_mag_valuation.acc_g_range;
+	ret = regmap_write(priv->regmap, BNO055_REG_ACC_CONFIG,tmp);
+	return ret;
+}	
+
+/*gyroscope configuration*/
+static int bno_gyr_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode ){
+	int ret;
+	bno055_set_page_id(priv,PAGE_ID_1);
+	priv->acc_gyr_mag_valuation.gyr_range = g_range;
+	priv->acc_gyr_mag_valuation.gyr_bandwidth = Bandwidth;
+	priv->acc_gyr_mag_valuation.gyr_mode = OPRMode;
+	int tmp_cf0,tmp_cf1;
+	tmp_cf0 =  priv->acc_gyr_mag_valuation.gyr_bandwidth|priv->acc_gyr_mag_valuation.gyr_range;
+	ret = regmap_write(priv->regmap, BNO055_REG_GYR_CONFIG_0,tmp_cf0);
+	tmp_cf1 = priv->acc_gyr_mag_valuation.gyr_mode;
+	ret = regmap_write(priv->regmap, BNO055_REG_GYR_CONFIG_1,tmp_cf1);
+	return ret;
+}
+
+static int bno_mag_config(struct bno055_priv *priv,int data_rate,int OPRMode,int PWRMode){
+	int ret;
+	bno055_set_page_id(priv,PAGE_ID_1);
+	priv->acc_gyr_mag_valuation.mag_data_rate = data_rate;
+	priv->acc_gyr_mag_valuation.mag_operation_mode = OPRMode;
+	priv->acc_gyr_mag_valuation.mag_pwr_mode = PWRMode;
+	int tmp;
+	tmp =  (priv->acc_gyr_mag_valuation.mag_pwr_mode|priv->acc_gyr_mag_valuation.mag_operation_mode) | priv->acc_gyr_mag_valuation.mag_data_rate;
+	ret = regmap_write(priv->regmap, BNO055_REG_MAG_CONFIG,tmp);
+	return ret;
+}
+
+static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  fusion_dof){
+	int ret;
+	int tmp;
+	bno055_set_page_id(priv,PAGE_ID_1);
+	priv->acc_gyr_mag_valuation.acc_linearacc_gravityvector_unit = acc;
+	priv->acc_gyr_mag_valuation.angular_rate_gyr_unit = angular;
+	priv->acc_gyr_mag_valuation.euler_angles_unit = euler;
+	priv->acc_gyr_mag_valuation.temp_unit = temp;
+	priv->acc_gyr_mag_valuation.fusion_dof = fusion_dof;
+	tmp = priv->acc_gyr_mag_valuation.fusion_dof |
+	      priv->acc_gyr_mag_valuation.temp_unit |
+	      priv->acc_gyr_mag_valuation.euler_angles_unit |
+	      priv->acc_gyr_mag_valuation.angular_rate_gyr_unit |
+	      priv->acc_gyr_mag_valuation.acc_linearacc_gravityvector_unit;
+	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL,tmp);
+	/*Set Scale*/
+	
+}
+
 static int bno055_init(struct bno055_priv *priv)
 {
-	
-	return 0;
+	int ret;
+	/*Set Axis Remap Config*/
+	ret = bno_axis_remap_config(priv,REMAP_CONFIG_P1_2_4_7);
+	if(ret) dev_err(priv->dev, "Failed to axis remap configuration\n");
+	/*Set Axis Remap Sign*/
+	ret bno_axis_remap_sign(priv,BNO055_AXIS_SIGN_P1);
+	if(ret) dev_err(priv->dev, "Failed to axis remap sign\n");
+	/*Set Power Mode*/
+	ret = bno_axis_pwr_mode(priv,BNO055_POWER_NORMAL);
+	if(ret) dev_err(priv->dev, "Failed to Set Power Mode\n");
+	/*acceleration configuration*/
+	ret = bno_acc_config(priv,BNO055_ACC_RANGE_2G,BNO055_ACC_BW_62_5HZ,BNO055_ACC_OPMODE_NORMAL);
+	if(ret) dev_err(priv->dev, "Failed to Set Acc Config\n");
+	/*gyroscope configuration*/
+	ret = bno_gyr_config(priv,BNO055_GYR_RANGE_2000DPS,BNO055_GYR_BW_32HZ,BNO055_GYR_OPMODE_NORMAL);
+	if(ret) dev_err(priv->dev, "Failed to Set Gyr Config\n");
+	/*mag configuration*/
+	ret = bno_mag_config(priv,BNO055_MAG_ODR_20HZ,BNO055_MAG_OPMODE_ENH_REGULAR,BNO055_MAG_PWR_FORCE);
+	if(ret) dev_err(priv->dev, "Failed to Set Mag Config\n");
+	/*Set unit*/
+
+	/*Set Temperature Source*/
+	/*Move to page 0 for read*/
+	/*Delay*/
+	/*Set Operation Mode*/
+
+	return ret;
 }
 
 /* ================= IIO INFO ================= */
@@ -397,11 +568,11 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 	if (ret)
 		return ret;
 	if(priv->id.CHIP_ID!=BNO055_CHIP_ID){
-		dev_warn(dev, "Unrecognized chip ID 0x%x\n", priv->id.CHIP_ID);
+		dev_warn(dev, "Unrecognized Chip ID 0x%x\n", priv->id.CHIP_ID);
 		return -ENODEV;
 	}
 	else{
-		dev_info(dev, "BNO055 detected\n");
+		dev_info(dev, "BNO055 Detected\n");
 	}
 	/*Reset*/
 	ret = bno055_system_reset(priv);

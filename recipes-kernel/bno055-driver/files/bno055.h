@@ -170,6 +170,12 @@
 #define BNO055_GYR_BW_64HZ			    (0x6 << BNO055_GYR_BW_SHIFT)
 #define BNO055_GYR_BW_32HZ			    (0x7 << BNO055_GYR_BW_SHIFT)
 
+#define BNO055_GYR_OPMODE_NORMAL					0x00
+#define BNO055_GYR_OPMODE_MODE_FAST_POWER_UP		0x01
+#define BNO055_GYR_OPMODE_DEEP_SUSPENDL				0x02
+#define BNO055_GYR_OPMODE_SUSPEND					0x03
+#define BNO055_GYR_OPMODE_ADVANCED_POWER_SAVE		0x04
+
 /* Magnetometer configuration */
 
 #define BNO055_MAG_ODR_2HZ			        0x00
@@ -213,7 +219,7 @@
 #define BNO055_UNIT_ANDROID_FORMAT		    (0x1 << 7)
 
 
-enum bno055_opr_mode_t{
+enum bno055_opr_mode{
 	//Config Mode
 	BNO055_OPR_MODE_CONFIG   		= 0x00,			//0
 	// Non Fusion Mode
@@ -232,17 +238,17 @@ enum bno055_opr_mode_t{
 	BNO055_OPR_MODE_NDOF 			= 0x0C,			//12
 };
 
-enum bno055_fusion_output_t{
+enum bno055_fusion_output{
 	BNO055_FUSION_OUTPUT_WINDOWS = 0x0 << 7,
 	BNO055_FUSION_OUTPUT_ANDROID = 0x1 << 7,
 };
 
-enum bno055_axis_remap_config_t{
-	BNO055_AXIS_REMAP_P0 = 0x21,
-	BNO055_AXIS_REMAP_P1 = 0x24, // default
+enum bno055_axis_remap_config{
+	REMAP_CONFIG_P0_3_5_6 = 0x21,
+	REMAP_CONFIG_P1_2_4_7 = 0x24, // default
 };
 
-enum bno055_axis_remap_sign_t{
+enum bno055_axis_remap_sign{
 	BNO055_AXIS_SIGN_P0 = 0x04,
 	BNO055_AXIS_SIGN_P1 = 0x00, // default
 	BNO055_AXIS_SIGN_P2 = 0x06,
@@ -253,23 +259,23 @@ enum bno055_axis_remap_sign_t{
 	BNO055_AXIS_SIGN_P7 = 0x05,
 };
 
-enum bno055_power_mode_t{
+enum bno055_power_mode{
 	BNO055_POWER_NORMAL = 0x00,
 	BNO055_POWER_LOW = 0x01,
 	BNO055_POWER_SUSPEND = 0x02,
 };
-enum bno055_temp_source_t{
+enum bno055_temp_source{
 	BNO055_TEMP_SRC_ACCEL = 0x00,
 	BNO055_TEMP_SRC_GYRO = 0x01,
 };
 
-enum bno055_page_id_t{
+enum bno055_page_id{
 	PAGE_ID_0 = 0,
 	PAGE_ID_1 = 1,
 };
 
-struct bno055_id_t{
-	enum bno055_page_id_t page_id;
+struct bno055_id{
+	enum bno055_page_id page_id;
 	unsigned int bl_rev_id;
 	unsigned int SW_REV_ID_LSB;
 	unsigned int SW_REV_ID_MSB;
@@ -289,6 +295,23 @@ struct bno055_scale {
 	int temp;
 };
 
+typedef struct bno055_acc_gyr_mag_valuation{
+	int acc_g_range;
+	int acc_bandwidth;
+	int acc_mode;
+	int gyr_range;
+	int gyr_bandwidth;
+	int gyr_mode;
+	int mag_data_rate;
+	int mag_operation_mode;
+	int mag_pwr_mode;
+	int acc_linearacc_gravityvector_unit;
+	int angular_rate_gyr_unit;
+	int euler_angles_unit;
+	int temp_unit;
+	int fusion_dof;
+};
+
 /* ================= STATE ================= */
 struct bno055_priv{
 	struct regmap *regmap;
@@ -296,12 +319,14 @@ struct bno055_priv{
 	struct mutex lock;
 	/*BNO_CONFIG*/
 	enum bno055_opr_mode_t opr_mode;
-	enum bno055_axis_remap_config_t axis_map_config;
-	enum bno055_axis_remap_sign_t axis_remap_sign;
-	enum bno055_power_mode_t power_mode;
-	enum bno055_temp_source_t temp_source;
-	struct bno055_id_t id;
+	enum bno055_axis_remap_config axis_map_config;
+	enum bno055_axis_remap_sign axis_remap_sign;
+	enum bno055_power_mode power_mode;
+	enum bno055_temp_source temp_source;
+	struct bno055_id id;
 	struct bno055_scale scale;
+	/*Config*/
+	struct bno055_acc_gyr_mag_valuation acc_gyr_mag_valuation;
 };
 
 /* ================= MODE TABLE ================= */
