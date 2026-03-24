@@ -1,5 +1,8 @@
 #include <linux/module.h>
 #include <linux/i2c.h>
+#include <linux/mod_devicetable.h>
+#include <linux/module.h>
+#include <linux/regmap.h>
 
 #include "bno055.h"
 
@@ -8,6 +11,13 @@
 #define DRIVER_DESC   "BoshBosch BNO055 IIO Driver"
 #define DRIVER_VERS   "1.0"
 
+
+static int bno055_i2c_probe(struct i2c_client *client)
+{
+	struct regmap *regmap;
+	regmap = devm_regmap_init_i2c(client, &bno055_regmap_config);
+	return bno055_probe(&client->dev, regmap);
+}
 
 static const struct of_device_id bno055_of_match[] = {
 	{ .compatible = "bosch,bno055" },
@@ -26,8 +36,8 @@ static struct i2c_driver bno055_driver = {
 		.name = "bno055",
 		.of_match_table = bno055_of_match,
 	},
-	.probe = bno055_probe,
-	.remove = bno055_remove,
+	.probe = bno055_i2c_probe,
+	// .remove = bno055_remove,
 	.id_table = bno055_id,
 };
 

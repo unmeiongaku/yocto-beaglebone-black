@@ -4,6 +4,8 @@
 #define BNO055_CHIP_ID			    	0xA0
 #define BNO055_I2C_ADDR				    0x28
 
+#define BNO055_PAGESEL_REG				0x07
+
 /* Page 0 registers */
 
 #define BNO055_REG_CHIP_ID			    0x00
@@ -13,7 +15,6 @@
 #define BNO055_REG_SW_REV_ID_LSB		0x04
 #define BNO055_REG_SW_REV_ID_MSB		0x05
 #define BNO055_REG_BL_REV_ID			0x06
-#define BNO055_REG_PAGE_ID			    0x07
 
 #define BNO055_REG_ACC_DATA_X_LSB		0x08
 #define BNO055_REG_ACC_DATA_X_MSB		0x09
@@ -115,7 +116,6 @@
 #define BNO055_PG0_LENGH	0x80
 #define BNO055_PG1(x) ((x) | BNO055_PG0_LENGH)
 #define BNO055_REG_PG1_START				0x00
-#define BNO055_REG_PG1_PAGE_ID				0x07
 #define BNO055_REG_ACC_CONFIG				0x08
 #define BNO055_REG_MAG_CONFIG				0x09
 #define BNO055_REG_GYR_CONFIG_0				0x0A
@@ -322,7 +322,7 @@ struct bno055_scale {
 	int temp;
 };
 
-typedef struct bno055_acc_gyr_mag_valuation{
+struct bno055_acc_gyr_mag_valuation{
 	int acc_g_range;
 	int acc_bandwidth;
 	int acc_mode;
@@ -345,7 +345,7 @@ struct bno055_priv{
 	struct device *dev;
 	struct mutex lock;
 	/*BNO_CONFIG*/
-	enum bno055_opr_mode_t opr_mode;
+	enum bno055_opr_mode opr_mode;
 	enum bno055_axis_remap_config axis_map_config;
 	enum bno055_axis_remap_sign axis_remap_sign;
 	enum bno055_power_mode power_mode;
@@ -362,8 +362,9 @@ struct bno055_mode_map {
 	u8 val;
 };
 
+int bno055_probe(struct device *dev, struct regmap *regmap);
+// void bno055_remove(struct device *dev, struct regmap *regmap);
 
-int bno055_probe(struct i2c_client *client);
-void bno055_remove(struct i2c_client *client);
+extern const struct regmap_config bno055_regmap_config;
 
 #endif /* BNO055_H_ */

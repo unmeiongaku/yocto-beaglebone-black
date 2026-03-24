@@ -99,5 +99,4 @@ IMAGE_INSTALL:append = " hello"
 IMAGE_INSTALL:append = " ll-character-device"
 IMAGE_INSTALL:append = " userspace"
 IMAGE_INSTALL:append = " userwificonnect"
-
-#IMAGE_INSTALL:append = " bno055"
+IMAGE_INSTALL:append = " bno055dev"

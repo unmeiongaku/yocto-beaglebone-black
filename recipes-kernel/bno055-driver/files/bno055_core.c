@@ -15,6 +15,10 @@
 #define DRIVER_VERS   "1.0"
 
 
+static bool bno055_regmap_readable(struct device *dev, unsigned int reg);
+static bool bno055_regmap_volatile(struct device *dev, unsigned int reg);
+static bool bno055_regmap_writeable(struct device *dev, unsigned int reg);
+
 static int bno055_get_chip_id(struct bno055_priv *priv);
 static int bno055_set_page_id(struct bno055_priv *priv, enum bno055_page_id tar_page_id);
 static int bno055_set_opr_mode(struct bno055_priv *priv,enum bno055_opr_mode opr_mode);
@@ -26,89 +30,97 @@ static int bno_axis_pwr_mode(struct bno055_priv *priv,enum bno055_power_mode  po
 static int bno_acc_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode );
 static int bno_gyr_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode );
 static int bno_mag_config(struct bno055_priv *priv,int data_rate,int OPRMode,int PWRMode);
-static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  fusion_dof)
+static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  fusion_dof);
 static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_source temp_source);
 
 static int bno055_init(struct bno055_priv *priv);
 static int bno055_system_reset(struct bno055_priv *priv);
 
 
-/*sysfs_atrr*/
-struct bno055_sysfs_attr {
-	int *vals;
-	int len;
-	int *fusion_vals;
-	int *hw_xlate;
-	int type;
-};
-/*Accelerometer*/
-//Using for accel Bandwidth
-static int bno055_acc_lpf_vals[] = {
-	7, 810000, 15, 630000, 31, 250000, 62, 500000,
-	125, 0, 250, 0, 500, 0, 1000, 0,
-};
+// /*sysfs_atrr*/
+// struct bno055_sysfs_attr {
+// 	const struct bno055_lpf *vals;
+// 	int len;
+// 	int *fusion_vals;
+// 	int *hw_xlate;
+// 	int type;
+// };
+// /*Accelerometer*/
+// //Using for accel Bandwidth
+// struct bno055_lpf {
+// 	int reg_val;
+// 	int freq;
+// };
 
-static struct bno055_sysfs_attr bno055_acc_lpf = {
-	.vals = bno055_acc_lpf_vals,
-	.len = ARRAY_SIZE(bno055_acc_lpf_vals),
-	.fusion_vals = (int[]){62, 500000},
-	.type = IIO_VAL_INT_PLUS_MICRO,
-};
+// static const struct bno055_lpf bno055_acc_lpf_vals[] = {
+// 	{7, 810000},
+// 	{15, 630000},
+// 	{31, 250000},
+// 	{62, 500000},
+// };
 
-static int bno055_acc_range_vals[] = {
-  /* G:    2,    4,    8,    16 */
-	1962, 3924, 7848, 15696
-};
+// static struct bno055_sysfs_attr bno055_acc_lpf = {
+// 	.vals = bno055_acc_lpf_vals,
+// 	.len = ARRAY_SIZE(bno055_acc_lpf_vals),
+// 	.fusion_vals = (int[]){62, 500000},
+// 	.type = IIO_VAL_INT_PLUS_MICRO,
+// };
 
-//Using for accel Grange
-static struct bno055_sysfs_attr bno055_acc_range = {
-	.vals = bno055_acc_range_vals,
-	.len = ARRAY_SIZE(bno055_acc_range_vals),
-	.fusion_vals = (int[]){3924}, /* 4G */
-	.type = IIO_VAL_INT,
-};
+// static int bno055_acc_range_vals[] = {
+//   /* G:    2,    4,    8,    16 */
+// 	1962, 3924, 7848, 15696,
+// };
+
+// //Using for accel Grange
+// static struct bno055_sysfs_attr bno055_acc_range = {
+// 	.vals = bno055_acc_range_vals,
+// 	.len = ARRAY_SIZE(bno055_acc_range_vals),
+// 	.fusion_vals = (int[]){3924}, /* 4G */
+// 	.type = IIO_VAL_INT,
+// };
 
 
-/* Gyroscope */
-/*
- * dps = hwval * (dps_range/2^15)
- * rps = hwval * (rps_range/2^15)
- *     = hwval * (dps_range/(2^15 * k))
- * where k is rad-to-deg factor
- */
+// /* Gyroscope */
+// /*
+//  * dps = hwval * (dps_range/2^15)
+//  * rps = hwval * (rps_range/2^15)
+//  *     = hwval * (dps_range/(2^15 * k))
+//  * where k is rad-to-deg factor
+//  */
 
-static int bno055_gyr_scale_vals[] = {
-	125, 1877467, 250, 1877467, 500, 1877467,
-	1000, 1877467, 2000, 1877467,
-};
+// static int bno055_gyr_scale_vals[] = {
+// 	125, 1877467, 250, 1877467, 500, 1877467,
+// 	1000, 1877467, 2000, 1877467,
+// };
 
-static struct bno055_sysfs_attr bno055_gyr_scale = {
-	.vals = bno055_gyr_scale_vals,
-	.len = ARRAY_SIZE(bno055_gyr_scale_vals),
-	.fusion_vals = (int[]){1, 900},
-	.hw_xlate = (int[]){4, 3, 2, 1, 0},
-	.type = IIO_VAL_FRACTIONAL,
-};
+// static struct bno055_sysfs_attr bno055_gyr_scale = {
+// 	.vals = bno055_gyr_scale_vals,
+// 	.len = ARRAY_SIZE(bno055_gyr_scale_vals),
+// 	.fusion_vals = (int[]){1, 900},
+// 	.hw_xlate = (int[]){4, 3, 2, 1, 0},
+// 	.type = IIO_VAL_FRACTIONAL,
+// };
 
-//Using for GYRO Bandwidth
-static int bno055_gyr_lpf_vals[] = {12, 23, 32, 47, 64, 116, 230, 523};
-static struct bno055_sysfs_attr bno055_gyr_lpf = {
-	.vals = bno055_gyr_lpf_vals,
-	.len = ARRAY_SIZE(bno055_gyr_lpf_vals),
-	.fusion_vals = (int[]){32},
-	.hw_xlate = (int[]){5, 4, 7, 3, 6, 2, 1, 0},
-	.type = IIO_VAL_INT,
-};
+// //Using for GYRO Bandwidth
+// static int bno055_gyr_lpf_vals[] = {12, 23, 32, 47, 64, 116, 230, 523};
+// static struct bno055_sysfs_attr bno055_gyr_lpf = {
+// 	.vals = bno055_gyr_lpf_vals,
+// 	.len = ARRAY_SIZE(bno055_gyr_lpf_vals),
+// 	.fusion_vals = (int[]){32},
+// 	.hw_xlate = (int[]){5, 4, 7, 3, 6, 2, 1, 0},
+// 	.type = IIO_VAL_INT,
+// };
 
-/* Magnetometer*/
-//Using for MAG Output Data Rate ODR
-static int bno055_mag_odr_vals[] = {2, 6, 8, 10, 15, 20, 25, 30};
-static struct bno055_sysfs_attr bno055_mag_odr = {
-	.vals = bno055_mag_odr_vals,
-	.len =  ARRAY_SIZE(bno055_mag_odr_vals),
-	.fusion_vals = (int[]){20},
-	.type = IIO_VAL_INT,
-};
+// /* Magnetometer*/
+// //Using for MAG Output Data Rate ODR
+// static int bno055_mag_odr_vals[] = {2, 6, 8, 10, 15, 20, 25, 30};
+// static struct bno055_sysfs_attr bno055_mag_odr = {
+// 	.vals = bno055_mag_odr_vals,
+// 	.len =  ARRAY_SIZE(bno055_mag_odr_vals),
+// 	.fusion_vals = (int[]){20},
+// 	.type = IIO_VAL_INT,
+// };
+
 static bool bno055_regmap_volatile(struct device *dev, unsigned int reg)
 {
 	/* data and status registers */
@@ -125,20 +137,22 @@ static bool bno055_regmap_volatile(struct device *dev, unsigned int reg)
 	return false;
 }
 
-static bool bno055_regmap_readable(struct device *dev, unsigned int reg){
+static bool bno055_regmap_readable(struct device *dev, unsigned int reg)
+{
 	/* unnamed PG0 reserved areas */
 	if((reg < BNO055_PG1(0) && reg > BNO055_CALDATA_END) 
 				|| reg == 0x3C 
 				|| (reg > BNO055_REG_AXIS_MAP_SIGN && reg < BNO055_CALDATA_START)) return false;		
 	/* unnamed PG1 reserved areas */
-	if((reg>BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_END) && reg <= BNO055_PG1(BNO055_REG_PG1_END)) 
+	if(reg > BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_END)
 				|| (reg>BNO055_PG1(BNO055_REG_GYR_AM_SET) && reg < BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_START))
-				|| reg = 0xE
-				|| (reg>=BNO055_PG1(BNO055_REG_PG1_START) && reg < BNO055_PG1(BNO055_REG_PG1_PAGE_ID))) return false;
+				|| reg == BNO055_PG1(0x0E)
+				|| (reg>=BNO055_PG1(BNO055_REG_PG1_START) && reg < BNO055_PG1(BNO055_PAGESEL_REG))) return false;
 	return true;
 }
 
-static bool bno055_regmap_writeable(struct device *dev, unsigned int reg){
+static bool bno055_regmap_writeable(struct device *dev, unsigned int reg)
+{
 	/*
 	 * Unreadable registers are indeed reserved; there are no WO regs
 	 * (except for a single bit in SYS_TRIGGER register)
@@ -148,7 +162,7 @@ static bool bno055_regmap_writeable(struct device *dev, unsigned int reg){
 	/* data and status registers */
 	if(reg >= BNO055_REG_ACC_DATA_X_LSB && reg <= BNO055_REG_SYS_ERR) return false;
 	/* ID areas */
-	if(reg<BNO055_REG_PAGE_ID || (reg <=BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_END) && reg >= BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_START))) return false;
+	if(reg<BNO055_PAGESEL_REG || (reg <=BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_END) && reg >= BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_START))) return false;
 	return true;
 }
 
@@ -156,7 +170,7 @@ static const struct regmap_range_cfg bno055_regmap_ranges[] = {
 	{
 		.range_min = 0,
 		.range_max = 0x7f * 2,
-		.selector_reg = BNO055_REG_PAGE_ID,
+		.selector_reg = BNO055_PAGESEL_REG,
 		.selector_mask = GENMASK(7, 0),
 		.selector_shift = 0,
 		.window_start = 0,
@@ -165,7 +179,7 @@ static const struct regmap_range_cfg bno055_regmap_ranges[] = {
 };
 
 const struct regmap_config bno055_regmap_config = {
-	.name = "bno055",
+	.name = DRIVER_NAME,
 	.reg_bits = 8,
 	.val_bits = 8,
 	.ranges = bno055_regmap_ranges,
@@ -244,7 +258,7 @@ enum bno055_scan_axis {
 	BNO055_SCAN_GRAVITY_Y,
 	BNO055_SCAN_GRAVITY_Z,
 	BNO055_SCAN_TIMESTAMP,
-	_BNO055_SCAN_MAX
+	_BNO055_SCAN_MAX,
 };
 /* =========================
  * Channel definitions
@@ -273,12 +287,11 @@ static const struct iio_chan_spec bno055_channels[] = {
 #define BNO055_NUM_CHANNELS ARRAY_SIZE(bno055_channels)
 
 /*SET Page ID*/
-static int bno055_set_page_id(struct bno055_priv *priv,
-			      enum bno055_page_id tar_page_id)
+static int bno055_set_page_id(struct bno055_priv *priv,enum bno055_page_id tar_page_id)
 {
 	int ret;
 	unsigned int pageid;
-	ret = regmap_read(priv->regmap, BNO055_REG_PAGE_ID, &pageid);
+	ret = regmap_read(priv->regmap, BNO055_PAGESEL_REG, &pageid);
 	if (ret) {
 		//dev_err(st->dev, "Failed to read page id\n");
 		goto out;
@@ -286,7 +299,7 @@ static int bno055_set_page_id(struct bno055_priv *priv,
 
 	if (pageid != tar_page_id) {
 
-		ret = regmap_write(priv->regmap, BNO055_REG_PAGE_ID,
+		ret = regmap_write(priv->regmap, BNO055_PAGESEL_REG,
 				   tar_page_id);
 		if (ret) {
 			//dev_err(st->dev, "Failed to set page id\n");	
@@ -300,59 +313,70 @@ static int bno055_set_page_id(struct bno055_priv *priv,
 
 	ret = 0;
 
-out:
+	out:
 	return ret;
 }
+
 /*Read Chip ID*/
-static int bno055_get_chip_id(struct bno055_priv *priv){	
+static int bno055_get_chip_id(struct bno055_priv *priv)
+{
+	struct device *dev = priv->dev;   // ✅ FIX
 	int ret;
-	bno055_set_page_id(priv,PAGE_ID_0);
-	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_LSB, &priv->id.SW_REV_ID_LSB);
-		if (ret)
-			return ret;
-	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_MSB, &priv->id.SW_REV_ID_MSB);
-		if (ret)
-			return ret;
-	if (priv->id.SW_REV_ID_MSB != 0x3 || priv->id.SW_REV_ID_LSB != 0x11)
-		dev_warn(dev, "Untested firmware version. Anglvel scale may not work as expected\n");
-	/*Read ACC_ID*/
+
+	bno055_set_page_id(priv, PAGE_ID_0);
+
+	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_LSB,
+			  &priv->id.SW_REV_ID_LSB);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_MSB,
+			  &priv->id.SW_REV_ID_MSB);
+	if (ret)
+		return ret;
+
+	if (priv->id.SW_REV_ID_MSB != 0x3 ||
+	    priv->id.SW_REV_ID_LSB != 0x11)
+		dev_warn(dev,
+			 "Untested firmware version. Anglvel scale may not work as expected\n");
+
 	ret = regmap_read(priv->regmap, BNO055_REG_ACC_ID, &priv->id.ACC_ID);
-		if (ret)
+	if (ret)
 		return ret;
-	/*Read GYR_ID*/
+
 	ret = regmap_read(priv->regmap, BNO055_REG_GYR_ID, &priv->id.GYR_ID);
-		if (ret)
+	if (ret)
 		return ret;
-	/*Read MAG_ID*/
+
 	ret = regmap_read(priv->regmap, BNO055_REG_MAG_ID, &priv->id.MAG_ID);
-		if (ret)
+	if (ret)
 		return ret;
-	/*BL_REV*/
+
 	ret = regmap_read(priv->regmap, BNO055_REG_BL_REV_ID, &priv->id.bl_rev_id);
-		if (ret)
+	if (ret)
 		return ret;
+
 	dev_info(dev, "=== BNO055 Chip Info ===\n");
 
 	dev_info(dev, "SW Revision: 0x%02X 0x%02X\n",
 		 priv->id.SW_REV_ID_MSB,
 		 priv->id.SW_REV_ID_LSB);
+
 	dev_info(dev, "CHIP ID    : 0x%02X\n", priv->id.CHIP_ID);
 	dev_info(dev, "ACC ID     : 0x%02X\n", priv->id.ACC_ID);
 	dev_info(dev, "GYR ID     : 0x%02X\n", priv->id.GYR_ID);
 	dev_info(dev, "MAG ID     : 0x%02X\n", priv->id.MAG_ID);
-
 	dev_info(dev, "Bootloader : 0x%02X\n", priv->id.bl_rev_id);
 
 	dev_info(dev, "========================\n");
-	return ret;
+
+	return 0;
 }
 
 
 
 /* ================= SET MODE ================= */
-static int bno055_set_opr_mode(struct bno055_priv *priv,
-			      enum bno055_opr_mode opr_mode)
-{
+static int bno055_set_opr_mode(struct bno055_priv *priv, enum bno055_opr_mode opr_mode){
 	int ret;
 	int cur_mode;
 	/*check current opr mode*/
@@ -398,44 +422,44 @@ static int bno055_set_opr_mode(struct bno055_priv *priv,
 }
 
 /* ================= SYSFS MODE ================= */
-static ssize_t bno055_mode_show(struct device *dev,
-				struct device_attribute *attr,
-				char *buf)
-{
-	struct bno055_priv *priv = dev_get_drvdata(dev);
-	int i;
+// static ssize_t bno055_mode_show(struct device *dev,
+// 				struct device_attribute *attr,
+// 				char *buf)
+// {
+// 	struct bno055_priv *priv = dev_get_drvdata(dev);
+// 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++)
-		if (bno055_modes[i].val == priv->opr_mode)
-			return sprintf(buf, "%s\n", bno055_modes[i].name);
+// 	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++)
+// 		if (bno055_modes[i].val == priv->opr_mode)
+// 			return sprintf(buf, "%s\n", bno055_modes[i].name);
 
-	return sprintf(buf, "UNKNOWN\n");
-}
+// 	return sprintf(buf, "UNKNOWN\n");
+// }
 
 
-static ssize_t bno055_mode_store(struct device *dev,	
-				 struct device_attribute *attr,
-				 const char *buf, size_t count)
-{
-	struct bno055_priv *priv = dev_get_drvdata(dev);
-	int i, ret;
+// static ssize_t bno055_mode_store(struct device *dev,	
+// 				 struct device_attribute *attr,
+// 				 const char *buf, size_t count)
+// {
+// 	struct bno055_priv *priv = dev_get_drvdata(dev);
+// 	int i, ret;
 
-	mutex_lock(&st->lock);
+// 	mutex_lock(&priv->lock);
 
-	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++) {
-		if (sysfs_streq(buf, bno055_modes[i].name)) {
-			ret = bno055_set_opr_mode(st,
-						 bno055_modes[i].val);
-			mutex_unlock(&st->lock);
-			return ret ? ret : count;
-		}
-	}
+// 	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++) {
+// 		if (sysfs_streq(buf, bno055_modes[i].name)) {
+// 			ret = bno055_set_opr_mode(st,
+// 						 bno055_modes[i].val);
+// 			mutex_unlock(&st->lock);
+// 			return ret ? ret : count;
+// 		}
+// 	}
 
-	mutex_unlock(&st->lock);
-	return -EINVAL;
-}
+// 	mutex_unlock(&st->lock);
+// 	return -EINVAL;
+// }
 
-static DEVICE_ATTR_RW(bno055_mode);
+// static DEVICE_ATTR_RW(bno055_mode);
 
 /* ================= READ RAW ================= */
 static int bno055_read_axis(struct bno055_priv *priv,
@@ -444,7 +468,7 @@ static int bno055_read_axis(struct bno055_priv *priv,
 	u8 data[2];
 	int ret;
 
-	ret = regmap_bulk_read(st->regmap, reg, data, 2);
+	ret = regmap_bulk_read(priv->regmap, reg, data, 2);
 	if (ret)
 		return ret;
 
@@ -453,9 +477,7 @@ static int bno055_read_axis(struct bno055_priv *priv,
 }
 
 
-static int bno055_read_raw(struct iio_dev *indio_dev,
-			   struct iio_chan_spec const *chan,
-			   int *val, int *val2, long mask)
+static int bno055_read_raw(struct iio_dev *indio_dev, struct iio_chan_spec const *chan, int *val, int *val2, long mask)
 {
 	struct bno055_priv *priv = iio_priv(indio_dev);
 	int ret;
@@ -463,9 +485,9 @@ static int bno055_read_raw(struct iio_dev *indio_dev,
 	switch (mask) {
 
 	case IIO_CHAN_INFO_RAW:
-		mutex_lock(&st->lock);
-		ret = bno055_read_axis(st, chan->address, val);
-		mutex_unlock(&st->lock);
+		mutex_lock(&priv->lock);
+		ret = bno055_read_axis(priv, chan->address, val);
+		mutex_unlock(&priv->lock);
 		if (ret)
 			return ret;
 
@@ -499,8 +521,9 @@ static int bno055_read_raw(struct iio_dev *indio_dev,
 
 
 static int bno055_system_reset(struct bno055_priv *priv){
+	int ret;
 	priv->id.page_id = PAGE_ID_0;
-	// ret = regmap_write(priv->regmap, BNO055_REG_PAGE_ID,
+	// ret = regmap_write(priv->regmap, BNO055_PAGESEL_REG,
 	// 		priv->id.page_id);
 	bno055_set_page_id(priv,PAGE_ID_0);
 	dev_info(priv->dev, "Reset BNO055 Device: ");
@@ -529,8 +552,8 @@ static int bno055_system_reset(struct bno055_priv *priv){
 /*CONFIG FUNCTION*/
 static int bno_axis_remap_config(struct bno055_priv *priv,enum bno055_axis_remap_config  axis_remap_config){
 	int ret;
-	bno055_set_page_id(priv,PAGE_ID_0);
-	int = tmp;
+	//bno055_set_page_id(priv,PAGE_ID_0);
+	int tmp;
 	switch(axis_remap_config){
 		case REMAP_CONFIG_P0_3_5_6:
 			tmp = REMAP_CONFIG_P0_3_5_6;
@@ -546,8 +569,8 @@ static int bno_axis_remap_config(struct bno055_priv *priv,enum bno055_axis_remap
 
 static int bno_axis_remap_sign(struct bno055_priv *priv,enum bno055_axis_remap_sign  axis_remap_sign){
 	int ret;
-	bno055_set_page_id(priv,PAGE_ID_0);
-	int = tmp;
+	//bno055_set_page_id(priv,PAGE_ID_0);
+	int tmp;
 	switch(axis_remap_sign){
 		case BNO055_AXIS_SIGN_P0:
 			tmp = BNO055_AXIS_SIGN_P0;
@@ -587,7 +610,7 @@ static int bno_axis_remap_sign(struct bno055_priv *priv,enum bno055_axis_remap_s
 
 static int bno_axis_pwr_mode(struct bno055_priv *priv,enum bno055_power_mode  power_mode){
 	int ret;
-	bno055_set_page_id(priv,PAGE_ID_0);
+	//bno055_set_page_id(priv,PAGE_ID_0);
 	int tmp;
 	switch(power_mode){
 		case BNO055_POWER_NORMAL:
@@ -609,48 +632,47 @@ static int bno_axis_pwr_mode(struct bno055_priv *priv,enum bno055_power_mode  po
 /*acceleration configuration*/
 static int bno_acc_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode ){
 	int ret;
-	bno055_set_page_id(priv,PAGE_ID_1);
+	//bno055_set_page_id(priv,PAGE_ID_1);
 	int tmp;
 	priv->acc_gyr_mag_valuation.acc_g_range = g_range;
 	priv->acc_gyr_mag_valuation.acc_bandwidth = Bandwidth;
 	priv->acc_gyr_mag_valuation.acc_mode = OPRMode;
-	int tmp;
 	tmp = (priv->acc_gyr_mag_valuation.acc_mode | priv->acc_gyr_mag_valuation.acc_bandwidth)| priv->acc_gyr_mag_valuation.acc_g_range;
-	ret = regmap_write(priv->regmap, BNO055_REG_ACC_CONFIG,tmp);
+	ret = regmap_write(priv->regmap, BNO055_PG1(BNO055_REG_ACC_CONFIG),tmp);
 	return ret;
 }	
 
 /*gyroscope configuration*/
 static int bno_gyr_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode ){
 	int ret;
-	bno055_set_page_id(priv,PAGE_ID_1);
+	//bno055_set_page_id(priv,PAGE_ID_1);
 	priv->acc_gyr_mag_valuation.gyr_range = g_range;
 	priv->acc_gyr_mag_valuation.gyr_bandwidth = Bandwidth;
 	priv->acc_gyr_mag_valuation.gyr_mode = OPRMode;
-	int tmp_cf0,tmp_cf1;
+	int tmp_cf0, tmp_cf1;
 	tmp_cf0 =  priv->acc_gyr_mag_valuation.gyr_bandwidth|priv->acc_gyr_mag_valuation.gyr_range;
-	ret = regmap_write(priv->regmap, BNO055_REG_GYR_CONFIG_0,tmp_cf0);
+	ret = regmap_write(priv->regmap, BNO055_PG1(BNO055_REG_GYR_CONFIG_0),tmp_cf0);
 	tmp_cf1 = priv->acc_gyr_mag_valuation.gyr_mode;
-	ret = regmap_write(priv->regmap, BNO055_REG_GYR_CONFIG_1,tmp_cf1);
+	ret = regmap_write(priv->regmap, BNO055_PG1(BNO055_REG_GYR_CONFIG_1),tmp_cf1);
 	return ret;
 }
 
 static int bno_mag_config(struct bno055_priv *priv,int data_rate,int OPRMode,int PWRMode){
 	int ret;
-	bno055_set_page_id(priv,PAGE_ID_1);
+	int tmp;
+	//bno055_set_page_id(priv,PAGE_ID_1);
 	priv->acc_gyr_mag_valuation.mag_data_rate = data_rate;
 	priv->acc_gyr_mag_valuation.mag_operation_mode = OPRMode;
 	priv->acc_gyr_mag_valuation.mag_pwr_mode = PWRMode;
-	int tmp;
 	tmp =  (priv->acc_gyr_mag_valuation.mag_pwr_mode|priv->acc_gyr_mag_valuation.mag_operation_mode) | priv->acc_gyr_mag_valuation.mag_data_rate;
-	ret = regmap_write(priv->regmap, BNO055_REG_MAG_CONFIG,tmp);
+	ret = regmap_write(priv->regmap, BNO055_PG1(BNO055_REG_MAG_CONFIG),tmp);
 	return ret;
 }
 
 static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  fusion_dof){
 	int ret;
 	int tmp;
-	bno055_set_page_id(priv,PAGE_ID_1);
+	//bno055_set_page_id(priv,PAGE_ID_1);
 	priv->acc_gyr_mag_valuation.acc_linearacc_gravityvector_unit = acc;
 	priv->acc_gyr_mag_valuation.angular_rate_gyr_unit = angular;
 	priv->acc_gyr_mag_valuation.euler_angles_unit = euler;
@@ -663,32 +685,31 @@ static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, 
 	      priv->acc_gyr_mag_valuation.acc_linearacc_gravityvector_unit;
 	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL,tmp);
 	/*Set Scale*/
-	
+	return ret;
 }
 
 static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_source temp_source){
 	int tmp,ret;
-	bno055_set_page_id(priv,PAGE_ID_1);
+	//bno055_set_page_id(priv,PAGE_ID_1);
 	if(temp_source == BNO055_TEMP_SRC_ACCEL){
-		config->temp_src.temp_src = BNO055_TEMP_SRC_ACCEL;
+		priv->temp_source = BNO055_TEMP_SRC_ACCEL;
 		tmp = BNO055_TEMP_SRC_ACCEL;
 	}
 	else if(temp_source == BNO055_TEMP_SRC_GYRO){
-		config->temp_src.temp_src = BNO055_TEMP_SRC_GYRO;
+		priv->temp_source = BNO055_TEMP_SRC_GYRO;
 		tmp = BNO055_TEMP_SRC_GYRO;
 	}
 	ret = regmap_write(priv->regmap, BNO055_REG_TEMP_SOURCE,tmp);
 	return ret;
 }
 
-static int bno055_init(struct bno055_priv *priv)
-{
+static int bno055_init(struct bno055_priv *priv){
 	int ret;
 	/*Set Axis Remap Config*/
 	ret = bno_axis_remap_config(priv,REMAP_CONFIG_P1_2_4_7);
 	if(ret) dev_err(priv->dev, "Failed to axis remap configuration\n");
 	/*Set Axis Remap Sign*/
-	ret bno_axis_remap_sign(priv,BNO055_AXIS_SIGN_P1);
+	ret = bno_axis_remap_sign(priv,BNO055_AXIS_SIGN_P1);
 	if(ret) dev_err(priv->dev, "Failed to axis remap sign\n");
 	/*Set Power Mode*/
 	ret = bno_axis_pwr_mode(priv,BNO055_POWER_NORMAL);
@@ -730,49 +751,66 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 	struct bno055_priv *priv;
 	struct iio_dev *iio_dev;
 	int ret;
+	unsigned int val;
+
 	iio_dev = devm_iio_device_alloc(dev, sizeof(*priv));
 	if (!iio_dev)
 		return -ENOMEM;
+
 	iio_dev->name = DRIVER_NAME;
+	iio_dev->dev.parent = dev;
+
 	priv = iio_priv(iio_dev);
 	mutex_init(&priv->lock);
+
 	priv->regmap = regmap;
 	priv->dev = dev;
-	ret = regmap_read(priv->regmap, BNO055_REG_CHIP_ID, &priv->id.CHIP_ID);
+
+	ret = regmap_read(priv->regmap, BNO055_PAGESEL_REG, &val);
 	if (ret)
 		return ret;
-	if(priv->id.CHIP_ID!=BNO055_CHIP_ID){
+
+	priv->id.CHIP_ID = val;
+
+	if (priv->id.CHIP_ID != BNO055_CHIP_ID) {
 		dev_warn(dev, "Unrecognized Chip ID 0x%x\n", priv->id.CHIP_ID);
 		return -ENODEV;
 	}
+
 	dev_info(dev, "BNO055 Detected\n");
-	/*Reset*/
+
 	ret = bno055_system_reset(priv);
-	if(ret) return ret;
-	/*Read chip ID*/
+	if (ret)
+		return ret;
+
 	ret = bno055_get_chip_id(priv);
-	if(ret) return ret;
-	/*Bno055 Init*/
+	if (ret)
+		return ret;
+
 	ret = bno055_init(priv);
-	if(ret){
-		dev_err(priv->dev, "Failed to Init\n");
-		return -ENODEV;
+	if (ret) {
+		dev_err(dev, "Failed to Init\n");
+		return ret;
 	}
+
 	iio_dev->channels = bno055_channels;
 	iio_dev->num_channels = BNO055_NUM_CHANNELS;
 	iio_dev->info = &bno055_info;
 	iio_dev->modes = INDIO_DIRECT_MODE;
+
 	ret = devm_iio_device_register(dev, iio_dev);
 	if (ret)
 		return ret;
-	dev_info(&client->dev, "BNO055 ready\n");
+
+	dev_info(dev, "BNO055 ready\n");
+
 	return 0;
 }
 
-void bno055_remove(struct device *dev, struct regmap *regmap)
-{
+// void bno055_remove(struct device *dev, struct regmap *regmap)
+// {
 	
-}
+// }
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR(DRIVER_AUTHOR);

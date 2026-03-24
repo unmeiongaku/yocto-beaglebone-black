@@ -1,5 +1,5 @@
-obj-m += bno055.o
-bno055-objs := bno055_core.o bno055_i2c.o
+obj-m += bno055dev.o
+bno055dev-objs := bno055_core.o bno055_i2c.o
 
 SRC := $(shell pwd)
 

@@ -14,4 +14,4 @@ SRC_URI = "file://bno055_core.c \
 
 S = "${WORKDIR}"
 
-KERNEL_MODULE_AUTOLOAD +="bno055"
+KERNEL_MODULE_AUTOLOAD +="bno055dev"
