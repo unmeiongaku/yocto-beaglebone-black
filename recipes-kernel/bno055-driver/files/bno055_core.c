@@ -23,9 +23,161 @@ static int bno055_set_opr_mode(struct bno055_priv *priv,enum bno055_opr_mode opr
 static int bno_axis_remap_config(struct bno055_priv *priv,enum bno055_axis_remap_config  axis_remap_config);
 static int bno_axis_remap_sign(struct bno055_priv *priv,enum bno055_axis_remap_sign  axis_remap_sign);
 static int bno_axis_pwr_mode(struct bno055_priv *priv,enum bno055_power_mode  power_mode);
+static int bno_acc_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode );
+static int bno_gyr_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode );
+static int bno_mag_config(struct bno055_priv *priv,int data_rate,int OPRMode,int PWRMode);
+static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  fusion_dof)
+static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_source temp_source);
 
 static int bno055_init(struct bno055_priv *priv);
 static int bno055_system_reset(struct bno055_priv *priv);
+
+
+/*sysfs_atrr*/
+struct bno055_sysfs_attr {
+	int *vals;
+	int len;
+	int *fusion_vals;
+	int *hw_xlate;
+	int type;
+};
+/*Accelerometer*/
+//Using for accel Bandwidth
+static int bno055_acc_lpf_vals[] = {
+	7, 810000, 15, 630000, 31, 250000, 62, 500000,
+	125, 0, 250, 0, 500, 0, 1000, 0,
+};
+
+static struct bno055_sysfs_attr bno055_acc_lpf = {
+	.vals = bno055_acc_lpf_vals,
+	.len = ARRAY_SIZE(bno055_acc_lpf_vals),
+	.fusion_vals = (int[]){62, 500000},
+	.type = IIO_VAL_INT_PLUS_MICRO,
+};
+
+static int bno055_acc_range_vals[] = {
+  /* G:    2,    4,    8,    16 */
+	1962, 3924, 7848, 15696
+};
+
+//Using for accel Grange
+static struct bno055_sysfs_attr bno055_acc_range = {
+	.vals = bno055_acc_range_vals,
+	.len = ARRAY_SIZE(bno055_acc_range_vals),
+	.fusion_vals = (int[]){3924}, /* 4G */
+	.type = IIO_VAL_INT,
+};
+
+
+/* Gyroscope */
+/*
+ * dps = hwval * (dps_range/2^15)
+ * rps = hwval * (rps_range/2^15)
+ *     = hwval * (dps_range/(2^15 * k))
+ * where k is rad-to-deg factor
+ */
+
+static int bno055_gyr_scale_vals[] = {
+	125, 1877467, 250, 1877467, 500, 1877467,
+	1000, 1877467, 2000, 1877467,
+};
+
+static struct bno055_sysfs_attr bno055_gyr_scale = {
+	.vals = bno055_gyr_scale_vals,
+	.len = ARRAY_SIZE(bno055_gyr_scale_vals),
+	.fusion_vals = (int[]){1, 900},
+	.hw_xlate = (int[]){4, 3, 2, 1, 0},
+	.type = IIO_VAL_FRACTIONAL,
+};
+
+//Using for GYRO Bandwidth
+static int bno055_gyr_lpf_vals[] = {12, 23, 32, 47, 64, 116, 230, 523};
+static struct bno055_sysfs_attr bno055_gyr_lpf = {
+	.vals = bno055_gyr_lpf_vals,
+	.len = ARRAY_SIZE(bno055_gyr_lpf_vals),
+	.fusion_vals = (int[]){32},
+	.hw_xlate = (int[]){5, 4, 7, 3, 6, 2, 1, 0},
+	.type = IIO_VAL_INT,
+};
+
+/* Magnetometer*/
+//Using for MAG Output Data Rate ODR
+static int bno055_mag_odr_vals[] = {2, 6, 8, 10, 15, 20, 25, 30};
+static struct bno055_sysfs_attr bno055_mag_odr = {
+	.vals = bno055_mag_odr_vals,
+	.len =  ARRAY_SIZE(bno055_mag_odr_vals),
+	.fusion_vals = (int[]){20},
+	.type = IIO_VAL_INT,
+};
+static bool bno055_regmap_volatile(struct device *dev, unsigned int reg)
+{
+	/* data and status registers */
+	if (reg >= BNO055_REG_ACC_DATA_X_LSB && reg <= BNO055_REG_SYS_ERR)
+		return true;
+	/* when in fusion mode, config is updated by chip */
+	if (reg == BNO055_REG_MAG_CONFIG ||
+	    reg == BNO055_REG_ACC_CONFIG ||
+	    reg == BNO055_REG_GYR_CONFIG_0 || reg == BNO055_REG_GYR_CONFIG_1)
+		return true;
+	/* calibration data may be updated by the IMU */
+	if (reg >= BNO055_CALDATA_START && reg <= BNO055_CALDATA_END)
+		return true;
+	return false;
+}
+
+static bool bno055_regmap_readable(struct device *dev, unsigned int reg){
+	/* unnamed PG0 reserved areas */
+	if((reg < BNO055_PG1(0) && reg > BNO055_CALDATA_END) 
+				|| reg == 0x3C 
+				|| (reg > BNO055_REG_AXIS_MAP_SIGN && reg < BNO055_CALDATA_START)) return false;		
+	/* unnamed PG1 reserved areas */
+	if((reg>BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_END) && reg <= BNO055_PG1(BNO055_REG_PG1_END)) 
+				|| (reg>BNO055_PG1(BNO055_REG_GYR_AM_SET) && reg < BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_START))
+				|| reg = 0xE
+				|| (reg>=BNO055_PG1(BNO055_REG_PG1_START) && reg < BNO055_PG1(BNO055_REG_PG1_PAGE_ID))) return false;
+	return true;
+}
+
+static bool bno055_regmap_writeable(struct device *dev, unsigned int reg){
+	/*
+	 * Unreadable registers are indeed reserved; there are no WO regs
+	 * (except for a single bit in SYS_TRIGGER register)
+	 */
+	if (!bno055_regmap_readable(dev, reg))
+		return false;
+	/* data and status registers */
+	if(reg >= BNO055_REG_ACC_DATA_X_LSB && reg <= BNO055_REG_SYS_ERR) return false;
+	/* ID areas */
+	if(reg<BNO055_REG_PAGE_ID || (reg <=BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_END) && reg >= BNO055_PG1(BNO055_REG_BNO_UNIQUE_ID_START))) return false;
+	return true;
+}
+
+static const struct regmap_range_cfg bno055_regmap_ranges[] = {
+	{
+		.range_min = 0,
+		.range_max = 0x7f * 2,
+		.selector_reg = BNO055_REG_PAGE_ID,
+		.selector_mask = GENMASK(7, 0),
+		.selector_shift = 0,
+		.window_start = 0,
+		.window_len = 0x80,
+	},
+};
+
+const struct regmap_config bno055_regmap_config = {
+	.name = "bno055",
+	.reg_bits = 8,
+	.val_bits = 8,
+	.ranges = bno055_regmap_ranges,
+	.num_ranges = 1,
+	.volatile_reg = bno055_regmap_volatile,
+	.max_register = 0x80 * 2,
+	.writeable_reg = bno055_regmap_writeable,
+	.readable_reg = bno055_regmap_readable,
+	.cache_type = REGCACHE_RBTREE,
+};
+
+EXPORT_SYMBOL_NS_GPL(bno055_regmap_config, IIO_BNO055);
 
 /* ================= MODE TABLE ================= */
 static const struct bno055_mode_map bno055_modes[] = {
@@ -261,7 +413,7 @@ static ssize_t bno055_mode_show(struct device *dev,
 }
 
 
-static ssize_t bno055_mode_store(struct device *dev,
+static ssize_t bno055_mode_store(struct device *dev,	
 				 struct device_attribute *attr,
 				 const char *buf, size_t count)
 {
@@ -514,6 +666,21 @@ static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, 
 	
 }
 
+static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_source temp_source){
+	int tmp,ret;
+	bno055_set_page_id(priv,PAGE_ID_1);
+	if(temp_source == BNO055_TEMP_SRC_ACCEL){
+		config->temp_src.temp_src = BNO055_TEMP_SRC_ACCEL;
+		tmp = BNO055_TEMP_SRC_ACCEL;
+	}
+	else if(temp_source == BNO055_TEMP_SRC_GYRO){
+		config->temp_src.temp_src = BNO055_TEMP_SRC_GYRO;
+		tmp = BNO055_TEMP_SRC_GYRO;
+	}
+	ret = regmap_write(priv->regmap, BNO055_REG_TEMP_SOURCE,tmp);
+	return ret;
+}
+
 static int bno055_init(struct bno055_priv *priv)
 {
 	int ret;
@@ -536,12 +703,18 @@ static int bno055_init(struct bno055_priv *priv)
 	ret = bno_mag_config(priv,BNO055_MAG_ODR_20HZ,BNO055_MAG_OPMODE_ENH_REGULAR,BNO055_MAG_PWR_FORCE);
 	if(ret) dev_err(priv->dev, "Failed to Set Mag Config\n");
 	/*Set unit*/
-
+	ret = bno_set_unit(priv,BNO055_UNIT_ACC_MS2,BNO055_UNIT_GYR_DPS,BNO055_UNIT_EUL_DEG,BNO055_UNIT_TEMP_C,BNO055_UNIT_ANDROID_FORMAT);
+	if(ret) dev_err(priv->dev, "Failed to Set Unit\n");
 	/*Set Temperature Source*/
+	ret = bno_set_temperature_src(priv,BNO055_TEMP_SRC_ACCEL);
+	if(ret) dev_err(priv->dev, "Failed to Set Temperature Source\n");
 	/*Move to page 0 for read*/
+	bno055_set_page_id(priv,PAGE_ID_0);
 	/*Delay*/
+	msleep(100);
 	/*Set Operation Mode*/
-
+	ret = bno055_set_opr_mode(priv,BNO055_OPR_MODE_NDOF);
+	msleep(50);
 	return ret;
 }
 
@@ -549,6 +722,7 @@ static int bno055_init(struct bno055_priv *priv)
 static const struct iio_info bno055_info = {
 	
 };
+
 
 
 int bno055_probe(struct device *dev, struct regmap *regmap)
@@ -571,9 +745,7 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 		dev_warn(dev, "Unrecognized Chip ID 0x%x\n", priv->id.CHIP_ID);
 		return -ENODEV;
 	}
-	else{
-		dev_info(dev, "BNO055 Detected\n");
-	}
+	dev_info(dev, "BNO055 Detected\n");
 	/*Reset*/
 	ret = bno055_system_reset(priv);
 	if(ret) return ret;
@@ -581,12 +753,25 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 	ret = bno055_get_chip_id(priv);
 	if(ret) return ret;
 	/*Bno055 Init*/
-	
+	ret = bno055_init(priv);
+	if(ret){
+		dev_err(priv->dev, "Failed to Init\n");
+		return -ENODEV;
+	}
+	iio_dev->channels = bno055_channels;
+	iio_dev->num_channels = BNO055_NUM_CHANNELS;
+	iio_dev->info = &bno055_info;
+	iio_dev->modes = INDIO_DIRECT_MODE;
+	ret = devm_iio_device_register(dev, iio_dev);
+	if (ret)
+		return ret;
+	dev_info(&client->dev, "BNO055 ready\n");
+	return 0;
 }
 
 void bno055_remove(struct device *dev, struct regmap *regmap)
 {
-
+	
 }
 
 MODULE_LICENSE("GPL");
