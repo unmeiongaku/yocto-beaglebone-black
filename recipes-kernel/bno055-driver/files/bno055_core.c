@@ -178,7 +178,7 @@ static const struct regmap_range_cfg bno055_regmap_ranges[] = {
 	},
 };
 
-const struct regmap_config bno055_regmap_config = {
+static const struct regmap_config bno055_regmap_config = {
 	.name = DRIVER_NAME,
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -766,7 +766,7 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 	priv->regmap = regmap;
 	priv->dev = dev;
 
-	ret = regmap_read(priv->regmap, BNO055_PAGESEL_REG, &val);
+	ret = regmap_read(priv->regmap, BNO055_REG_CHIP_ID, &val);
 	if (ret)
 		return ret;
 
@@ -776,6 +776,8 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 		dev_warn(dev, "Unrecognized Chip ID 0x%x\n", priv->id.CHIP_ID);
 		return -ENODEV;
 	}
+
+    msleep(50);
 
 	dev_info(dev, "BNO055 Detected\n");
 
