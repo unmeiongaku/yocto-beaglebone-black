@@ -1,0 +1,45 @@
+diff --git a/am335x-boneblack.dts.orig b/am335x-boneblack.dts
+index 09ea639..ffe4698 100644
+--- a/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
++++ b/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
+@@ -178,3 +178,40 @@
+ &baseboard_eeprom {
+ 	vcc-supply = <&ldo4_reg>;
+ };
++
++&i2c2 {
++    status = "okay";
++    clock-frequency = <100000>;
++    bno055@28 {
++		status = "okay";
++		compatible = "bosch,bno055";
++		reg = <0x28>;
++	};
++};
++
++/* =========================
++ * User LED on P8_12 (GPIO1_12)
++ * ========================= */
++
++&am33xx_pinmux {
++    user_led_pins: pinmux_user_led_pins {
++        pinctrl-single,pins = <
++            0x030 0x07  /* P8_12 -> gpio1_12 */
++        >;
++    };
++};
++
++&ocp {
++    user_leds {
++        compatible = "gpio-leds";
++
++        pinctrl-names = "default";
++        pinctrl-0 = <&user_led_pins>;
++
++        led0 {
++            label = "user-led";
++            gpios = <&gpio1 12 0>;
++            default-state = "off";
++        };
++    };
++};
