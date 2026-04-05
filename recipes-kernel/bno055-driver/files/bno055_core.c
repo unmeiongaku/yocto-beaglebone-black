@@ -178,7 +178,7 @@ static const struct regmap_range_cfg bno055_regmap_ranges[] = {
 	},
 };
 
-static const struct regmap_config bno055_regmap_config = {
+const struct regmap_config bno055_regmap_config = {
 	.name = DRIVER_NAME,
 	.reg_bits = 8,
 	.val_bits = 8,
