@@ -177,8 +177,7 @@ static const struct regmap_range_cfg bno055_regmap_ranges[] = {
 		.window_len = 0x80,
 	},
 };
-
-const struct regmap_config bno055_regmap_config = {
+const struct regmap_config bno055dev_regmap_config = {
 	.name = DRIVER_NAME,
 	.reg_bits = 8,
 	.val_bits = 8,
@@ -191,7 +190,7 @@ const struct regmap_config bno055_regmap_config = {
 	.cache_type = REGCACHE_RBTREE,
 };
 
-EXPORT_SYMBOL_NS_GPL(bno055_regmap_config, IIO_BNO055);
+EXPORT_SYMBOL_NS_GPL(bno055dev_regmap_config, IIO_BNO055);
 
 /* ================= MODE TABLE ================= */
 static const struct bno055_mode_map bno055_modes[] = {
@@ -212,11 +211,12 @@ static const struct bno055_mode_map bno055_modes[] = {
 
 /*IIO channel*/
 
+/* ================= IIO INFO ================= */
+
 /* =========================
  * Macro define channel
  * ========================= */
 //in_<type>_<axis>_<info>
-
 #define BNO055_CHANNEL(_type, _axis, _index, _address, _sep, _sh, _avail) {	\
 	.address = _address,							\
 	.type = _type,								\
@@ -234,6 +234,7 @@ static const struct bno055_mode_map bno055_modes[] = {
 		.repeat = IIO_MOD_##_axis == IIO_MOD_QUATERNION ? 4 : 0,        \
 	},									\
 }
+
 
 
 /* scan indexes follow DATA register order */
@@ -266,25 +267,213 @@ enum bno055_scan_axis {
 
 static const struct iio_chan_spec bno055_channels[] = {
 	/* ================= accelerometer  ================= */
-	
+	BNO055_CHANNEL(IIO_ACCEL,X,BNO055_SCAN_ACCEL_X,
+					BNO055_REG_ACC_DATA_X_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY)),
+	BNO055_CHANNEL(IIO_ACCEL,Y,BNO055_SCAN_ACCEL_Y,
+					BNO055_REG_ACC_DATA_Y_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY)),	
+
+	BNO055_CHANNEL(IIO_ACCEL,Z,BNO055_SCAN_ACCEL_Z,
+					BNO055_REG_ACC_DATA_Z_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY)),	
+	/* ================= gyroscope ================= */
+	BNO055_CHANNEL(IIO_ANGL_VEL,X,BNO055_SCAN_GYRO_X,
+					BNO055_REG_GYR_DATA_X_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY)),
+	BNO055_CHANNEL(IIO_ANGL_VEL,Y,BNO055_SCAN_GYRO_Y,
+					BNO055_REG_GYR_DATA_Y_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY)),	
+	BNO055_CHANNEL(IIO_ANGL_VEL,Z,BNO055_SCAN_GYRO_Z,
+					BNO055_REG_GYR_DATA_Z_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY),
+					BIT(IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY)),	
+	/* ================= magnetometer ================= */
+	BNO055_CHANNEL(IIO_MAGN,X,BNO055_SCAN_MAGN_X,
+					BNO055_REG_MAG_DATA_X_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_SAMP_FREQ),
+					BIT(IIO_CHAN_INFO_SAMP_FREQ)),
+	BNO055_CHANNEL(IIO_MAGN,Y,BNO055_SCAN_MAGN_Y,
+					BNO055_REG_MAG_DATA_Y_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_SAMP_FREQ),
+					BIT(IIO_CHAN_INFO_SAMP_FREQ)),	
+	BNO055_CHANNEL(IIO_MAGN,Z,BNO055_SCAN_MAGN_Z,
+					BNO055_REG_MAG_DATA_Z_LSB,BIT(IIO_CHAN_INFO_OFFSET),
+					BIT(IIO_CHAN_INFO_SAMP_FREQ),
+					BIT(IIO_CHAN_INFO_SAMP_FREQ)),	
+	/* ================= euler angle ================= */
+	BNO055_CHANNEL(IIO_ROT, YAW, BNO055_SCAN_YAW,
+		       		BNO055_REG_EUL_HEADING_LSB, 0, 0, 0),
+	BNO055_CHANNEL(IIO_ROT, ROLL, BNO055_SCAN_ROLL,
+		       		BNO055_REG_EUL_ROLL_LSB, 0, 0, 0),
+	BNO055_CHANNEL(IIO_ROT, PITCH, BNO055_SCAN_PITCH,
+		       		BNO055_REG_EUL_PITCH_LSB, 0, 0, 0),
+	/* ================= quaternion ================= */
+	BNO055_CHANNEL(IIO_ROT, QUATERNION, BNO055_SCAN_QUATERNION,
+		       		BNO055_REG_QUA_DATA_W_LSB, 0, 0, 0),	
+	/* ================= linear acceleration ================= */
+	BNO055_CHANNEL(IIO_ACCEL, LINEAR_X, BNO055_SCAN_LIA_X,
+		      	 	BNO055_REG_LIA_DATA_X_LSB, 0, 0, 0),
+	BNO055_CHANNEL(IIO_ACCEL, LINEAR_Y, BNO055_SCAN_LIA_X,
+		       		BNO055_REG_LIA_DATA_Y_LSB, 0, 0, 0),
+	BNO055_CHANNEL(IIO_ACCEL, LINEAR_Z, BNO055_SCAN_LIA_X,
+		       		BNO055_REG_LIA_DATA_Z_LSB, 0, 0, 0),
+	/* ================= gravity vector =================*/
+	BNO055_CHANNEL(IIO_GRAVITY,X, BNO055_SCAN_GRAVITY_X,
+		      	 	BNO055_REG_GRV_DATA_X_LSB, 0, 0, 0),
+	BNO055_CHANNEL(IIO_GRAVITY,Y, BNO055_SCAN_GRAVITY_Y,
+		       		BNO055_REG_GRV_DATA_Y_LSB, 0, 0, 0),
+	BNO055_CHANNEL(IIO_GRAVITY,Z, BNO055_SCAN_GRAVITY_Z,
+		       		BNO055_REG_GRV_DATA_Z_LSB, 0, 0, 0),
+	{
+		.type = IIO_TEMP,
+		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
+		.scan_index = -1,
+	},				
+	IIO_CHAN_SOFT_TIMESTAMP(BNO055_SCAN_TIMESTAMP),
+};
+
+#define BNO055_NUM_CHANNELS ARRAY_SIZE(bno055_channels)
+
+/* ================= READ RAW DATA ================= */
+
+static int bno055_read_simple_chan(struct iio_dev *indio_dev,
+				   struct iio_chan_spec const *chan,
+				   int *val, int *val2, long mask)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	__le16 raw_val;
+	int ret;
+	switch (mask) {
+		case IIO_CHAN_INFO_RAW:
+			ret = regmap_bulk_read(priv->regmap, chan->address, &raw_val, sizeof(raw_val));
+			//raw_val = [MSB][LSB] (little endian)
+			//le16_to_cpu(raw_val) means: convert from little-endian to CPU endian
+			if (ret < 0) return ret;
+			*val = sign_extend32(le16_to_cpu(raw_val), 15);
+			return IIO_VAL_INT;
+		case IIO_CHAN_INFO_OFFSET:
+			if (priv->operation_mode != BNO055_OPR_MODE_AMG) {
+			*val = 0;
+			} 
+			else{
+				ret = regmap_bulk_read(priv->regmap,chan->address+BNO055_REG_OFFSET_ADDR,&raw_val, sizeof(raw_val));
+				if (ret < 0) return ret;
+				*val = -sign_extend32(le16_to_cpu(raw_val), 15);
+			}
+			return IIO_VAL_INT;
+		case IIO_CHAN_INFO_SCALE:
+			*val = 1;
+			switch (chan->type) {
+				case IIO_GRAVITY:
+				/* Table 3-35: 1 m/s^2 = 100 LSB */
+				/*			   1 mg    = 1 LSB*/
+				case IIO_ACCEL:
+				/* Table 3-17: 1 m/s^2 = 100 LSB */
+				/*			   1 mg    = 1 LSB*/
+				*val2 = 100;
+					break;
+				case IIO_MAGN:
+				/*
+				* Table 3-19: 1 uT = 16 LSB.  But we need
+				* Gauss: 1 µT = 0.01 G.
+				*/
+				// 1 LSB  = (1 / 16) µT
+      			// 	   = (1 / 16) * 0.01 G
+       			// 	   = 1 / 1600 G
+				*val2 = 1600;   //output unit Gauss
+					break;
+				case IIO_ANGL_VEL:
+					/*
+					* Table 3-22: 1 Rps = 900 LSB
+					* .. but this is not exactly true. See comment at the
+					* beginning of this file.
+					*/
+					
+					break;	
+				case IIO_ROT:
+					break;
+				default:
+					return -EINVAL;
+			}
+			return IIO_VAL_FRACTIONAL;
+		case IIO_CHAN_INFO_SAMP_FREQ:
+		case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+	}
+}
+
+static bool bno055_is_chan_readable(struct iio_dev *indio_dev,
+				    struct iio_chan_spec const *chan)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+
+	if (priv->opr_mode != BNO055_OPR_MODE_AMG)
+		return true;
+	/*If in AMG MODE block these read*/
+	switch (chan->type) {
+		//block read from IIO_GRAVITY and Quaternion
+	case IIO_GRAVITY:
+	case IIO_ROT:
+		return false;
+	case IIO_ACCEL:
+		if (chan->channel2 == IIO_MOD_LINEAR_X ||
+		    chan->channel2 == IIO_MOD_LINEAR_Y ||
+		    chan->channel2 == IIO_MOD_LINEAR_Z)
+			return false;
+		return true;
+	default:
+		return true;
+	}
+}
 
 
-	/* ================= ACCEL ================= */
-	// BNO055_CHAN(IIO_ACCEL, IIO_MOD_X, BNO055_REG_ACC_DATA_X_LSB),
-	// BNO055_CHAN(IIO_ACCEL, IIO_MOD_Y, BNO055_REG_ACC_DATA_Y_LSB),
-	// BNO055_CHAN(IIO_ACCEL, IIO_MOD_Z, BNO055_REG_ACC_DATA_Z_LSB),
-	// /* ================= GYRO ================= */
-	// BNO055_CHAN(IIO_ANGL_VEL, IIO_MOD_X, BNO055_REG_GYR_DATA_X_LSB),
-	// BNO055_CHAN(IIO_ANGL_VEL, IIO_MOD_Y, BNO055_REG_GYR_DATA_Y_LSB),
-	// BNO055_CHAN(IIO_ANGL_VEL, IIO_MOD_Z, BNO055_REG_GYR_DATA_Z_LSB),
-	// /* ================= MAG ================= */
-	// BNO055_CHAN(IIO_MAGN, IIO_MOD_X, BNO055_REG_MAG_DATA_X_LSB),
-	// BNO055_CHAN(IIO_MAGN, IIO_MOD_Y, BNO055_REG_MAG_DATA_Y_LSB),
-	// BNO055_CHAN(IIO_MAGN, IIO_MOD_Z, BNO055_REG_MAG_DATA_Z_LSB),
+static int _bno055_read_raw_multi(struct iio_dev *indio_dev,
+				  struct iio_chan_spec const *chan,
+				  int size, int *vals, int *val_len,
+				  long mask)
+{
+	if(!bno055_is_chan_readable(indio_dev,chan)) return -EBUSY;
+	switch (chan->type) {
+		case IIO_MAGN:
+		case IIO_ACCEL:
+		case IIO_ANGL_VEL:
+		case IIO_GRAVITY:	
+			if (size < 2)
+				return -EINVAL;
+			*val_len = 2;
+			return bno055_read_simple_chan(indio_dev, chan, &vals[0], &vals[1],mask);
+		
+	}
+}
+
+static int bno055_read_raw_multi(struct iio_dev *indio_dev,
+				 struct iio_chan_spec const *chan,
+				 int size, int *vals, int *val_len,
+				 long mask)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+
+	mutex_lock(&priv->lock);
+	ret = _bno055_read_raw_multi(indio_dev, chan, size,
+				     vals, val_len, mask);
+	mutex_unlock(&priv->lock);
+	return ret;
+}
+
+
+static const struct iio_info bno055dev_info = {
+	.read_raw_multi = bno055_read_raw_multi,
 };
 
 
-#define BNO055_NUM_CHANNELS ARRAY_SIZE(bno055_channels)
+
+/* ================= END IIO INFO ================= */
 
 /*SET Page ID*/
 static int bno055_set_page_id(struct bno055_priv *priv,enum bno055_page_id tar_page_id)
@@ -460,64 +649,6 @@ static int bno055_set_opr_mode(struct bno055_priv *priv, enum bno055_opr_mode op
 // }
 
 // static DEVICE_ATTR_RW(bno055_mode);
-
-/* ================= READ RAW ================= */
-static int bno055_read_axis(struct bno055_priv *priv,
-			   u8 reg, int *val)
-{
-	u8 data[2];
-	int ret;
-
-	ret = regmap_bulk_read(priv->regmap, reg, data, 2);
-	if (ret)
-		return ret;
-
-	*val = (s16)((data[1] << 8) | data[0]);
-	return 0;
-}
-
-
-static int bno055_read_raw(struct iio_dev *indio_dev, struct iio_chan_spec const *chan, int *val, int *val2, long mask)
-{
-	struct bno055_priv *priv = iio_priv(indio_dev);
-	int ret;
-
-	switch (mask) {
-
-	case IIO_CHAN_INFO_RAW:
-		mutex_lock(&priv->lock);
-		ret = bno055_read_axis(priv, chan->address, val);
-		mutex_unlock(&priv->lock);
-		if (ret)
-			return ret;
-
-		return IIO_VAL_INT;
-
-	case IIO_CHAN_INFO_SCALE:
-		switch (chan->type) {
-
-		case IIO_ACCEL:
-			*val = 0;
-			*val2 = 9800; /* mg */
-			return IIO_VAL_INT_PLUS_MICRO;
-
-		case IIO_ANGL_VEL:
-			*val = 0;
-			*val2 = 87266; /* rad/s */
-			return IIO_VAL_INT_PLUS_MICRO;
-
-		case IIO_MAGN:
-			*val = 0;
-			*val2 = 1000;
-			return IIO_VAL_INT_PLUS_MICRO;
-
-		default:
-			return -EINVAL;
-		}
-	}
-
-	return -EINVAL;
-}
 
 
 static int bno055_system_reset(struct bno055_priv *priv){
@@ -739,11 +870,6 @@ static int bno055_init(struct bno055_priv *priv){
 	return ret;
 }
 
-/* ================= IIO INFO ================= */
-static const struct iio_info bno055_info = {
-	
-};
-
 
 
 int bno055_probe(struct device *dev, struct regmap *regmap)
@@ -797,7 +923,7 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 
 	iio_dev->channels = bno055_channels;
 	iio_dev->num_channels = BNO055_NUM_CHANNELS;
-	iio_dev->info = &bno055_info;
+	iio_dev->info = &bno055dev_info;
 	iio_dev->modes = INDIO_DIRECT_MODE;
 
 	ret = devm_iio_device_register(dev, iio_dev);

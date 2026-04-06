@@ -11,7 +11,7 @@ static int bno055_i2c_probe(struct i2c_client *client)
 {
 	struct regmap *regmap;
 
-	regmap = devm_regmap_init_i2c(client, &bno055_regmap_config);
+	regmap = devm_regmap_init_i2c(client, &bno055dev_regmap_config);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 

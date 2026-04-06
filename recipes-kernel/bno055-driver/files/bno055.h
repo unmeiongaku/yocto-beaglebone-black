@@ -8,6 +8,8 @@
 
 /* Page 0 registers */
 
+#define BNO055_REG_OFFSET_ADDR			0x4D
+
 #define BNO055_REG_CHIP_ID			    0x00
 #define BNO055_REG_ACC_ID			    0x01
 #define BNO055_REG_MAG_ID			    0x02
@@ -365,6 +367,6 @@ struct bno055_mode_map {
 int bno055_probe(struct device *dev, struct regmap *regmap);
 // void bno055_remove(struct device *dev, struct regmap *regmap);
 
-extern const struct regmap_config bno055_regmap_config;
+extern const struct regmap_config bno055dev_regmap_config;
 
 #endif /* BNO055_H_ */
