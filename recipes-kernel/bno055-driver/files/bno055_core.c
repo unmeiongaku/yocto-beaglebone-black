@@ -38,88 +38,103 @@ static int bno055_system_reset(struct bno055_priv *priv);
 
 
 // /*sysfs_atrr*/
-// struct bno055_sysfs_attr {
-// 	const struct bno055_lpf *vals;
-// 	int len;
-// 	int *fusion_vals;
-// 	int *hw_xlate;
-// 	int type;
-// };
+struct bno055_sysfs_attr {
+	int *vals;
+	int len;
+	int *fusion_vals;
+	int *hw_xlate;
+	int type;
+};
 // /*Accelerometer*/
-// //Using for accel Bandwidth
-// struct bno055_lpf {
-// 	int reg_val;
-// 	int freq;
-// };
+static int bno055_acc_lpf_bandwidths_vals[] = {
+	7, 810000, 15, 630000, 31, 250000, 62, 500000,
+	125, 0, 250, 0, 500, 0, 1000, 0,
+};
 
-// static const struct bno055_lpf bno055_acc_lpf_vals[] = {
-// 	{7, 810000},
-// 	{15, 630000},
-// 	{31, 250000},
-// 	{62, 500000},
-// };
+static struct bno055_sysfs_attr bno055_acc_lpf_bw = {
+	.vals = bno055_acc_lpf_bandwidths_vals,
+	.len = ARRAY_SIZE(bno055_acc_lpf_bandwidths_vals),
+	.fusion_vals = (int[]){62, 500000}, //default value in fusion mode
+	.type = IIO_VAL_INT_PLUS_MICRO, //*val + (*val2 / 1,000,000)
+};
 
-// static struct bno055_sysfs_attr bno055_acc_lpf = {
-// 	.vals = bno055_acc_lpf_vals,
-// 	.len = ARRAY_SIZE(bno055_acc_lpf_vals),
-// 	.fusion_vals = (int[]){62, 500000},
-// 	.type = IIO_VAL_INT_PLUS_MICRO,
-// };
+static int bno055_acc_range_vals[] = {
+  /* G:    2,    4,    8,    16 */
+	1962, 3924, 7848, 15696
+};
 
-// static int bno055_acc_range_vals[] = {
-//   /* G:    2,    4,    8,    16 */
-// 	1962, 3924, 7848, 15696,
-// };
+static struct bno055_sysfs_attr bno055_acc_range = {
+	.vals = bno055_acc_range_vals,
+	.len = ARRAY_SIZE(bno055_acc_range_vals),
+	.fusion_vals = (int[]){3924}, /* 4G */
+	.type = IIO_VAL_INT,
+};
 
-// //Using for accel Grange
-// static struct bno055_sysfs_attr bno055_acc_range = {
-// 	.vals = bno055_acc_range_vals,
-// 	.len = ARRAY_SIZE(bno055_acc_range_vals),
-// 	.fusion_vals = (int[]){3924}, /* 4G */
-// 	.type = IIO_VAL_INT,
-// };
+/*Gyroscope*/
+/*
+ * dps = hwval * (dps_range/2^15)
+ * rps = hwval * (rps_range/2^15)
+ *     = hwval * (dps_range/(2^15 * k))
+ * where k is rad-to-deg factor
+ */
+static int bno055_gyr_scale_vals[] = {
+	125, 1877467, 250, 1877467, 500, 1877467,
+	1000, 1877467, 2000, 1877467,
+};
 
+static struct bno055_sysfs_attr bno055_gyr_scale = {
+	.vals = bno055_gyr_scale_vals,
+	.len = ARRAY_SIZE(bno055_gyr_scale_vals),
+	.fusion_vals = (int[]){1, 900},
+	.hw_xlate = (int[]){4, 3, 2, 1, 0},
+	.type = IIO_VAL_FRACTIONAL,
+};
 
-// /* Gyroscope */
-// /*
-//  * dps = hwval * (dps_range/2^15)
-//  * rps = hwval * (rps_range/2^15)
-//  *     = hwval * (dps_range/(2^15 * k))
-//  * where k is rad-to-deg factor
-//  */
+static int bno055_gyr_lpf_vals_bandwidths[] = {12, 23, 32, 47, 64, 116, 230, 523};
+static struct bno055_sysfs_attr bno055_gyr_lpf_bw = {
+	.vals = bno055_gyr_lpf_vals_bandwidths,
+	.len = ARRAY_SIZE(bno055_gyr_lpf_vals_bandwidths),
+	.fusion_vals = (int[]){32}, //default
+	.hw_xlate = (int[]){5, 4, 7, 3, 6, 2, 1, 0},
+	.type = IIO_VAL_INT,
+};
 
-// static int bno055_gyr_scale_vals[] = {
-// 	125, 1877467, 250, 1877467, 500, 1877467,
-// 	1000, 1877467, 2000, 1877467,
-// };
+static int bno055_mag_odr_vals[] = {2, 6, 8, 10, 15, 20, 25, 30};
+static struct bno055_sysfs_attr bno055_mag_odr = {
+	.vals = bno055_mag_odr_vals,
+	.len =  ARRAY_SIZE(bno055_mag_odr_vals),
+	.fusion_vals = (int[]){20},
+	.type = IIO_VAL_INT,
+};
 
-// static struct bno055_sysfs_attr bno055_gyr_scale = {
-// 	.vals = bno055_gyr_scale_vals,
-// 	.len = ARRAY_SIZE(bno055_gyr_scale_vals),
-// 	.fusion_vals = (int[]){1, 900},
-// 	.hw_xlate = (int[]){4, 3, 2, 1, 0},
-// 	.type = IIO_VAL_FRACTIONAL,
-// };
+static int bno055_get_regmask(struct bno055_priv *priv, int *val, int *val2,
+			      int reg, int mask, struct bno055_sysfs_attr *attr)
+{
+	const int shift = __ffs(mask); //return low bit position //shift = __ffs(0b00001110) = 1    //shift = __ffs(0b00000111) = 0
+	int hwval, idx;
+	int ret;
+	int i;
 
-// //Using for GYRO Bandwidth
-// static int bno055_gyr_lpf_vals[] = {12, 23, 32, 47, 64, 116, 230, 523};
-// static struct bno055_sysfs_attr bno055_gyr_lpf = {
-// 	.vals = bno055_gyr_lpf_vals,
-// 	.len = ARRAY_SIZE(bno055_gyr_lpf_vals),
-// 	.fusion_vals = (int[]){32},
-// 	.hw_xlate = (int[]){5, 4, 7, 3, 6, 2, 1, 0},
-// 	.type = IIO_VAL_INT,
-// };
+	ret = regmap_read(priv->regmap, reg, &hwval); 
+	if (ret)
+		return ret;
 
-// /* Magnetometer*/
-// //Using for MAG Output Data Rate ODR
-// static int bno055_mag_odr_vals[] = {2, 6, 8, 10, 15, 20, 25, 30};
-// static struct bno055_sysfs_attr bno055_mag_odr = {
-// 	.vals = bno055_mag_odr_vals,
-// 	.len =  ARRAY_SIZE(bno055_mag_odr_vals),
-// 	.fusion_vals = (int[]){20},
-// 	.type = IIO_VAL_INT,
-// };
+	idx = (hwval & mask) >> shift;
+	if (attr->hw_xlate)
+		for (i = 0; i < attr->len; i++)
+			if (attr->hw_xlate[i] == idx) {
+				idx = i;
+				break;
+			}
+	if (attr->type == IIO_VAL_INT) {
+		*val = attr->vals[idx];
+	} else { /* IIO_VAL_INT_PLUS_MICRO or IIO_VAL_FRACTIONAL */
+		*val = attr->vals[idx * 2];
+		*val2 = attr->vals[idx * 2 + 1];
+	}
+
+	return attr->type;
+}
 
 static bool bno055_regmap_volatile(struct device *dev, unsigned int reg)
 {
@@ -358,7 +373,7 @@ static int bno055_read_simple_chan(struct iio_dev *indio_dev,
 			*val = sign_extend32(le16_to_cpu(raw_val), 15);
 			return IIO_VAL_INT;
 		case IIO_CHAN_INFO_OFFSET:
-			if (priv->operation_mode != BNO055_OPR_MODE_AMG) {
+			if (priv->opr_mode != BNO055_OPR_MODE_AMG) {
 			*val = 0;
 			} 
 			else{
@@ -376,7 +391,7 @@ static int bno055_read_simple_chan(struct iio_dev *indio_dev,
 				case IIO_ACCEL:
 				/* Table 3-17: 1 m/s^2 = 100 LSB */
 				/*			   1 mg    = 1 LSB*/
-				*val2 = 100;
+				*val2 = priv->scale.accel;
 					break;
 				case IIO_MAGN:
 				/*
@@ -386,7 +401,8 @@ static int bno055_read_simple_chan(struct iio_dev *indio_dev,
 				// 1 LSB  = (1 / 16) µT
       			// 	   = (1 / 16) * 0.01 G
        			// 	   = 1 / 1600 G
-				*val2 = 1600;   //output unit Gauss
+				//*val2 = 1600;   //output unit Gauss
+				*val2 = priv->scale.mag;
 					break;
 				case IIO_ANGL_VEL:
 					/*
@@ -394,16 +410,46 @@ static int bno055_read_simple_chan(struct iio_dev *indio_dev,
 					* .. but this is not exactly true. See comment at the
 					* beginning of this file.
 					*/
-					
+					if(priv->opr_mode != BNO055_OPR_MODE_AMG){
+						*val = bno055_gyr_scale.fusion_vals[0];
+						*val2 = bno055_gyr_scale.fusion_vals[1];
+						return IIO_VAL_FRACTIONAL;
+					}
+					// *val2 = priv->scale.gyro;
+					return bno055_get_regmask(priv,val,val2,BNO055_PG1(BNO055_REG_GYR_CONFIG_0),BNO055_GYR_CONFIG_RANGE_MASK,&bno055_gyr_scale);
 					break;	
 				case IIO_ROT:
+					/* Table 3-28: 1 degree = 16 LSB */
+					*val2 = 16;
 					break;
 				default:
 					return -EINVAL;
 			}
 			return IIO_VAL_FRACTIONAL;
 		case IIO_CHAN_INFO_SAMP_FREQ:
+			if (chan->type != IIO_MAGN)
+				return -EINVAL;
+			return bno055_get_regmask(priv, val, val2,
+						BNO055_PG1(BNO055_REG_MAG_CONFIG),
+						BNO055_MAG_CONFIG_ODR_MASK,
+						&bno055_mag_odr);
 		case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+			switch (chan->type) {
+			case IIO_ANGL_VEL:
+				return bno055_get_regmask(priv, val, val2,
+						  BNO055_PG1(BNO055_REG_GYR_CONFIG_0),
+						  BNO055_GYR_CONFIG_LPF_BW_MASK,
+						  &bno055_gyr_lpf_bw); 
+			case IIO_ACCEL:
+				return bno055_get_regmask(priv, val, val2,
+						  BNO055_PG1(BNO055_REG_ACC_CONFIG),
+						  BNO055_ACC_CONFIG_LPF_BW_MASK,
+						  &bno055_acc_lpf_bw); 
+			default:
+				return -EINVAL;
+			}
+		default:
+			return -EINVAL;
 	}
 }
 
@@ -432,6 +478,55 @@ static bool bno055_is_chan_readable(struct iio_dev *indio_dev,
 }
 
 
+static int bno055_read_temp_chan(struct iio_dev *indio_dev, int *val)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int raw_val;
+	int ret;
+
+	ret = regmap_read(priv->regmap, BNO055_REG_TEMP, &raw_val);
+	if (ret < 0)
+		return ret;
+
+	/*
+	 * Tables 3-36 and 3-37: one byte of priv, signed, 1 LSB = 1C.
+	 * ABI wants milliC.
+	 */
+	*val = raw_val * 1000; 
+
+	return IIO_VAL_INT;
+}
+
+static int bno055_read_quaternion(struct iio_dev *indio_dev,
+				  struct iio_chan_spec const *chan,
+				  int size, int *vals, int *val_len,
+				  long mask)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	__le16 raw_vals[4];
+	int i, ret;
+	switch (mask) {
+		case IIO_CHAN_INFO_RAW:
+			if (size < 4) return -EINVAL;
+			ret = regmap_bulk_read(priv->regmap,BNO055_REG_QUA_DATA_W_LSB,
+				       		raw_vals, sizeof(raw_vals));
+			if (ret < 0) return ret;
+			for (i = 0; i < 4; i++){
+				vals[i] = sign_extend32(le16_to_cpu(raw_vals[i]), 15);
+			}
+			*val_len = 4;				
+			return IIO_VAL_INT_MULTIPLE;
+		case IIO_CHAN_INFO_SCALE:
+		/* Table 3-31: 1 quaternion = 2^14 LSB */
+			if (size < 2) return -EINVAL;
+			vals[0] = 1;
+			vals[1] = 14;
+			return IIO_VAL_FRACTIONAL_LOG2;
+		default:
+			return -EINVAL;
+	}
+
+}
 static int _bno055_read_raw_multi(struct iio_dev *indio_dev,
 				  struct iio_chan_spec const *chan,
 				  int size, int *vals, int *val_len,
@@ -447,8 +542,27 @@ static int _bno055_read_raw_multi(struct iio_dev *indio_dev,
 				return -EINVAL;
 			*val_len = 2;
 			return bno055_read_simple_chan(indio_dev, chan, &vals[0], &vals[1],mask);
-		
+		case IIO_TEMP:
+			*val_len = 1;
+			return bno055_read_temp_chan(indio_dev, &vals[0]);		
+		case IIO_ROT:
+			/*
+			* Rotation is exposed as either a quaternion or three
+			* Euler angles.
+			*/
+			if (chan->channel2 == IIO_MOD_QUATERNION) 
+				return bno055_read_quaternion(indio_dev, chan,
+							size, vals,
+							val_len, mask);
+			if(size < 2) return -EINVAL;
+			*val_len = 2;
+				return bno055_read_simple_chan(indio_dev, chan,
+							&vals[0], &vals[1],
+							mask);
+		default:
+		return -EINVAL;	
 	}
+	return 0;
 }
 
 static int bno055_read_raw_multi(struct iio_dev *indio_dev,
@@ -466,9 +580,283 @@ static int bno055_read_raw_multi(struct iio_dev *indio_dev,
 	return ret;
 }
 
+static int bno055_sysfs_attr_avail(struct bno055_priv *priv, struct bno055_sysfs_attr *attr,
+				   const int **vals, int *length)
+{
+	if (priv->opr_mode != BNO055_OPR_MODE_AMG) {
+		/* locked when fusion enabled */
+		*vals = attr->fusion_vals;
+		if (attr->type == IIO_VAL_INT)
+			*length = 1;
+		else
+			*length = 2; /* IIO_VAL_INT_PLUS_MICRO or IIO_VAL_FRACTIONAL*/
+	} else {
+		*vals = attr->vals;
+		*length = attr->len;
+	}
+
+	return attr->type;
+}
+
+static int bno055_read_avail(struct iio_dev *indio_dev,
+			     struct iio_chan_spec const *chan,
+			     const int **vals, int *type, int *length,
+			     long mask)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	switch (mask) {
+		case IIO_CHAN_INFO_SCALE:
+			switch (chan->type) {
+			case IIO_ANGL_VEL:
+				*type = bno055_sysfs_attr_avail(priv, &bno055_gyr_scale,vals, length);
+				return IIO_AVAIL_LIST;
+			default:
+				return -EINVAL;	
+			}
+		case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+			switch (chan->type) {
+				case IIO_ANGL_VEL:
+					*type = bno055_sysfs_attr_avail(priv, &bno055_gyr_lpf_bw,vals, length);
+					return IIO_AVAIL_LIST;
+				case IIO_ACCEL:
+					*type = bno055_sysfs_attr_avail(priv, &bno055_acc_lpf_bw,vals, length);
+					return IIO_AVAIL_LIST;
+				default:
+					return -EINVAL;
+			}
+			break;
+		case IIO_CHAN_INFO_SAMP_FREQ:
+		switch (chan->type) {
+			case IIO_MAGN:
+				*type = bno055_sysfs_attr_avail(priv, &bno055_mag_odr,vals, length);
+				return IIO_AVAIL_LIST;
+			default:
+				return -EINVAL;
+		}
+		default:
+			return -EINVAL;
+	}
+}
+
+static int bno055_set_regmask(struct bno055_priv *priv, int val, int val2,
+			      int reg, int mask, struct bno055_sysfs_attr *attr)
+{
+	const int shift = __ffs(mask);
+	int best_delta;
+	int req_val;
+	int tbl_val;
+	bool first;
+	int delta;
+	int hwval;
+	int ret;
+	int len;
+	int i;
+
+	/*
+	 * The closest value the HW supports is only one in fusion mode,
+	 * and it is autoselected, so don't do anything, just return OK,
+	 * as the closest possible value has been (virtually) selected
+	 */
+	if (priv->opr_mode != BNO055_OPR_MODE_AMG)
+		return 0;
+
+	len = attr->len;
+
+	/*
+	 * We always get a request in INT_PLUS_MICRO, but we
+	 * take care of the micro part only when we really have
+	 * non-integer tables. This prevents 32-bit overflow with
+	 * larger integers contained in integer tables.
+	 */
+	req_val = val;
+	if (attr->type != IIO_VAL_INT) {
+		len /= 2;
+		req_val = min(val, 2147) * 1000000 + val2;
+	}
+
+	first = true;
+	for (i = 0; i < len; i++) {
+		switch (attr->type) {
+		case IIO_VAL_INT:
+			tbl_val = attr->vals[i];
+			break;
+		case IIO_VAL_INT_PLUS_MICRO:
+			WARN_ON(attr->vals[i * 2] > 2147);
+			tbl_val = attr->vals[i * 2] * 1000000 +
+				attr->vals[i * 2 + 1];
+			break;
+		case IIO_VAL_FRACTIONAL:
+			WARN_ON(attr->vals[i * 2] > 4294);
+			tbl_val = attr->vals[i * 2] * 1000000 /
+				attr->vals[i * 2 + 1];
+			break;
+		default:
+			return -EINVAL;
+		}
+		delta = abs(tbl_val - req_val);
+		if (first || delta < best_delta) {
+			best_delta = delta;
+			hwval = i;
+			first = false;
+		}
+	}
+
+	if (attr->hw_xlate)
+		hwval = attr->hw_xlate[hwval];
+
+	ret = bno055_set_opr_mode(priv, BNO055_OPR_MODE_CONFIG);
+	if (ret)
+		return ret;
+
+	ret = regmap_update_bits(priv->regmap, reg, mask, hwval << shift);
+	if (ret)
+		return ret;
+
+	return bno055_set_opr_mode(priv, BNO055_OPR_MODE_AMG);
+}
+
+static int _bno055_write_raw(struct iio_dev *iio_dev,
+			     struct iio_chan_spec const *chan,
+			     int val, int val2, long mask)
+{
+	struct bno055_priv *priv = iio_priv(iio_dev);
+	switch (chan->type) {
+	case IIO_MAGN:
+		switch (mask) {
+			case IIO_CHAN_INFO_SAMP_FREQ:
+				return bno055_set_regmask(priv, val, val2,
+						  BNO055_PG1(BNO055_REG_MAG_CONFIG),
+						  BNO055_MAG_CONFIG_ODR_MASK,
+						  &bno055_mag_odr);
+			default:
+				return -EINVAL;
+		}
+	case IIO_ACCEL:
+		switch (mask) {
+			case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+				return bno055_set_regmask(priv, val, val2,
+						  BNO055_PG1(BNO055_REG_ACC_CONFIG),
+						  BNO055_ACC_CONFIG_LPF_BW_MASK,
+						  &bno055_acc_lpf_bw);
+			default:
+				return -EINVAL;
+		}
+	case IIO_ANGL_VEL:
+		switch (mask) {
+			case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+				return bno055_set_regmask(priv, val, val2,
+							BNO055_PG1(BNO055_REG_GYR_CONFIG_0),
+							BNO055_GYR_CONFIG_LPF_BW_MASK,
+							&bno055_gyr_lpf_bw);
+			case IIO_CHAN_INFO_SCALE:
+				return bno055_set_regmask(priv, val, val2,
+						  	BNO055_PG1(BNO055_REG_GYR_CONFIG_0),
+						  	BNO055_GYR_CONFIG_RANGE_MASK,
+						  	&bno055_gyr_scale);
+			default:
+				return -EINVAL;
+		}
+	default:
+		return -EINVAL;
+	}
+}
+
+static int bno055_write_raw(struct iio_dev *iio_dev,
+			    struct iio_chan_spec const *chan,
+			    int val, int val2, long mask)
+{
+	struct bno055_priv *priv = iio_priv(iio_dev);
+	int ret;
+
+	mutex_lock(&priv->lock);
+	ret = _bno055_write_raw(iio_dev, chan, val, val2, mask);
+	mutex_unlock(&priv->lock);
+
+	return ret;
+}
+
+/*binary sysfs*/ 
+static const char *bno055_mode_str[] = {
+	"CONFIG",
+	"ACCONLY",
+	"MAGONLY",
+	"GYRONLY",
+	"ACCMAG",
+	"ACCGYRO",
+	"MAGGYRO",
+	"AMG",
+	"IMU",
+	"COMPASS",
+	"M4G",
+	"NDOF_FMC_OFF",
+	"NDOF",
+};
+
+static ssize_t operation_mode_show(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct bno055_priv *priv = iio_priv(dev_to_iio_dev(dev));
+
+	if (priv->opr_mode < ARRAY_SIZE(bno055_mode_str))
+		return sysfs_emit(buf, "%d %s\n",
+				 priv->opr_mode,
+				 bno055_mode_str[priv->opr_mode]);
+
+	return sysfs_emit(buf, "UNKNOWN\n");
+}
+
+static ssize_t operation_mode_store(struct device *dev,
+				  struct device_attribute *attr,
+				  char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+
+}
+
+
+static IIO_DEVICE_ATTR_RW(operation_mode, 0);
+static IIO_DEVICE_ATTR_RW(in_magn_calibration_fast_enable, 0);
+static IIO_DEVICE_ATTR_RW(in_accel_range_raw, 0);
+
+static IIO_DEVICE_ATTR_RO(in_accel_range_raw_available, 0);
+static IIO_DEVICE_ATTR_RO(sys_calibration_auto_status, 0);
+static IIO_DEVICE_ATTR_RO(in_accel_calibration_auto_status, 0);
+static IIO_DEVICE_ATTR_RO(in_gyro_calibration_auto_status, 0);
+static IIO_DEVICE_ATTR_RO(in_magn_calibration_auto_status, 0);
+static IIO_DEVICE_ATTR_RO(serialnumber, 0);
+
+static struct attribute *bno055_attrs[] = {
+	&iio_dev_attr_in_accel_range_raw_available.dev_attr.attr,
+	&iio_dev_attr_in_accel_range_raw.dev_attr.attr,
+	&iio_dev_attr_operation_mode.dev_attr.attr, //ok
+	&iio_dev_attr_in_magn_calibration_fast_enable.dev_attr.attr,
+	&iio_dev_attr_sys_calibration_auto_status.dev_attr.attr,
+	&iio_dev_attr_in_accel_calibration_auto_status.dev_attr.attr,
+	&iio_dev_attr_in_gyro_calibration_auto_status.dev_attr.attr,
+	&iio_dev_attr_in_magn_calibration_auto_status.dev_attr.attr,
+	&iio_dev_attr_serialnumber.dev_attr.attr,
+	NULL
+};
+
+static BIN_ATTR_RO(calibration_data, BNO055_CALDATA_LEN);
+
+static struct bin_attribute *bno055_bin_attrs[] = {
+	&bin_attr_calibration_data,
+	NULL
+};
+
+static const struct attribute_group bno055_attrs_group = {
+	.attrs = bno055_attrs,
+	.bin_attrs = bno055_bin_attrs,
+};
 
 static const struct iio_info bno055dev_info = {
 	.read_raw_multi = bno055_read_raw_multi,
+	.read_avail = bno055_read_avail,
+	.write_raw  = bno055_write_raw,
+	.attrs = &bno055_attrs_group,
 };
 
 
@@ -816,6 +1204,12 @@ static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, 
 	      priv->acc_gyr_mag_valuation.acc_linearacc_gravityvector_unit;
 	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL,tmp);
 	/*Set Scale*/
+	priv->scale.accel = (acc == BNO055_UNIT_ACC_MS2) ? 100 : 1;
+	priv->scale.gyro = (angular == BNO055_UNIT_GYR_DPS) ? 16 : 900;
+	priv->scale.mag = 16;
+	priv->scale.euler = (euler == BNO055_UNIT_EUL_DEG) ? 16 : 900;
+	priv->scale.qua = 16384;
+	priv->scale.temp = (temp == BNO055_UNIT_TEMP_C) ? 1 : 2;
 	return ret;
 }
 
