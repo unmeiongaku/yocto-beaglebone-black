@@ -359,6 +359,7 @@ struct bno055_priv{
 	enum bno055_temp_source temp_source;
 	struct bno055_id id;
 	struct bno055_scale scale;
+	bool isCalib;
 	/*Config*/
 	struct bno055_acc_gyr_mag_valuation acc_gyr_mag_valuation;
 };

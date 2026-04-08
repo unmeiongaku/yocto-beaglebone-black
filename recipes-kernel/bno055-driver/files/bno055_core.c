@@ -35,7 +35,7 @@ static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_sou
 
 static int bno055_init(struct bno055_priv *priv);
 static int bno055_system_reset(struct bno055_priv *priv);
-static bool isCalibrationReady(struct bno055_priv *priv);
+// static bool isCalibrationReady(struct bno055_priv *priv);
 
 // /*sysfs_atrr*/
 struct bno055_sysfs_attr {
@@ -909,9 +909,11 @@ static ssize_t bno055_calibration_status_show(struct device *dev,
 	mag_sts = tmp & 0x03;
 	if(sys_sts == 3 && gyr_sts == 3 && acc_sts == 3 && mag_sts== 3){
 		isOk = 1;
+		priv->isCalib = true;
 	}
 	else{
 		isOk = 0;
+		priv->isCalib = false;
 	}
 	 return sysfs_emit(buf, "%d\n", isOk);
 }
@@ -969,25 +971,25 @@ static ssize_t bno055_chip_id_show(struct device *dev,
 		acc, gyr, mag, bl);
 }
 
-static bool isCalibrationReady(struct bno055_priv *priv){
-	int tmp;
-	int sys_sts,acc_sts,gyr_sts,mag_sts;
-	int isOk;
-	int ret;
-	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
-	if(ret) return ret;
-	sys_sts = (tmp >> 6) & 0x03;
-	gyr_sts = (tmp >> 4) & 0x03;
-	acc_sts = (tmp >> 2) & 0x03;
-	mag_sts = tmp & 0x03;
-	if(sys_sts == 3 && gyr_sts == 3 && acc_sts == 3 && mag_sts== 3){
-		isOk = 1;
-	}
-	else{
-		isOk = 0;
-	}
-	return isOk;
-}
+// static bool isCalibrationReady(struct bno055_priv *priv){
+// 	int tmp;
+// 	int sys_sts,acc_sts,gyr_sts,mag_sts;
+// 	int isOk;
+// 	int ret;
+// 	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
+// 	if(ret) return ret;
+// 	sys_sts = (tmp >> 6) & 0x03;
+// 	gyr_sts = (tmp >> 4) & 0x03;
+// 	acc_sts = (tmp >> 2) & 0x03;
+// 	mag_sts = tmp & 0x03;
+// 	if(sys_sts == 3 && gyr_sts == 3 && acc_sts == 3 && mag_sts== 3){
+// 		isOk = 1;
+// 	}
+// 	else{
+// 		isOk = 0;
+// 	}
+// 	return isOk;
+// }
 
 static ssize_t bno055_acc_calibration_offset_show(struct device *dev,
 				   struct device_attribute *attr,
@@ -1000,9 +1002,12 @@ static ssize_t bno055_acc_calibration_offset_show(struct device *dev,
 	/*Check Mode*/
 	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if(ret) return ret;
-	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
 	/*Check Status*/
-	if(!isCalibrationReady(priv)) return -EBUSY;
+	if(!priv->isCalib) return -EBUSY;
 	/*get calibration*/
 	/* Read ACC offsets (LSB + MSB) */
 	u8 raw[6];
@@ -1078,9 +1083,12 @@ static ssize_t bno055_gyr_calibration_offset_show(struct device *dev,
 	/*Check Mode*/
 	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if(ret) return ret;
-	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	if(cur_mode!=BNO055_OPR_MODE_CONFIG){
+		dev_warn(dev, "Please Move to Config Mode\n");
+		return -EBUSY;
+	} 
 	/*Check Status*/
-	if(!isCalibrationReady(priv)) return -EBUSY;
+	if(!priv->isCalib) return -EBUSY;
 	/*get calibration*/
 	/* Read GYR offsets (LSB + MSB) */
 	u8 raw[6];
@@ -1155,9 +1163,12 @@ static ssize_t bno055_mag_calibration_offset_show(struct device *dev,
 	/*Check Mode*/
 	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if(ret) return ret;
-	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
 	/*Check Status*/
-	if(!isCalibrationReady(priv)) return -EBUSY;
+	if(!priv->isCalib) return -EBUSY;
 	/*get calibration*/
 	/* Read MAG offsets (LSB + MSB) */
 	u8 raw[6];
@@ -1232,9 +1243,12 @@ static ssize_t bno055_accradius_calibration_offset_show(struct device *dev,
 	/*Check Mode*/
 	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if(ret) return ret;
-	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+		if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
 	/*Check Status*/
-	if(!isCalibrationReady(priv)) return -EBUSY;
+	if(!priv->isCalib) return -EBUSY;
 	/*get calibration*/
 	/* Read MAG offsets (LSB + MSB) */
 	u8 raw[2];
@@ -1303,9 +1317,12 @@ static ssize_t bno055_magradius_calibration_offset_show(struct device *dev,
 	/*Check Mode*/
 	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if(ret) return ret;
-	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+		if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
 	/*Check Status*/
-	if(!isCalibrationReady(priv)) return -EBUSY;
+	if(!priv->isCalib) return -EBUSY;
 	/*get calibration*/
 	/* Read MAG offsets (LSB + MSB) */
 	u8 raw[2];
@@ -1383,6 +1400,7 @@ static IIO_DEVICE_ATTR_RW(bno055_magradius_calibration_offset, 0);
 static struct attribute *bno055dev_attrs[] = {
 	&iio_dev_attr_bno055_chip_id.dev_attr.attr, //ok
 	&iio_dev_attr_bno055_opr_mode.dev_attr.attr, //ok
+	&iio_dev_attr_bno055_calibration_status.dev_attr.attr,
 	&iio_dev_attr_bno055_sys_status_calibration.dev_attr.attr,
 	&iio_dev_attr_bno055_gyr_status_calibration.dev_attr.attr,
 	&iio_dev_attr_bno055_acc_status_calibration.dev_attr.attr,
@@ -1452,6 +1470,7 @@ static int bno055_set_page_id(struct bno055_priv *priv,enum bno055_page_id tar_p
 /*Read Chip ID*/
 static int bno055_get_chip_id(struct bno055_priv *priv)
 {
+	mutex_lock(&priv->lock);
 	struct device *dev = priv->dev;   // ✅ FIX
 	int ret;
 
@@ -1501,7 +1520,7 @@ static int bno055_get_chip_id(struct bno055_priv *priv)
 	dev_info(dev, "Bootloader : 0x%02X\n", priv->id.bl_rev_id);
 
 	dev_info(dev, "========================\n");
-
+	mutex_unlock(&priv->lock);
 	return 0;
 }
 
@@ -1755,6 +1774,7 @@ static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_sou
 
 static int bno055_init(struct bno055_priv *priv){
 	int ret;
+	priv->isCalib = false;
 	/*Set Axis Remap Config*/
 	ret = bno_axis_remap_config(priv,REMAP_CONFIG_P1_2_4_7);
 	if(ret) dev_err(priv->dev, "Failed to axis remap configuration\n");
