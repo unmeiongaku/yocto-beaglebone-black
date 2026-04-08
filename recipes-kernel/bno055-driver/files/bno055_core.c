@@ -35,7 +35,7 @@ static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_sou
 
 static int bno055_init(struct bno055_priv *priv);
 static int bno055_system_reset(struct bno055_priv *priv);
-
+static bool isCalibrationReady(struct bno055_priv *priv);
 
 // /*sysfs_atrr*/
 struct bno055_sysfs_attr {
@@ -835,27 +835,563 @@ static ssize_t bno055_opr_mode_store(struct device *dev,
 	return len;
 }
 
+static ssize_t bno055_sys_status_calibration_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int tmp,sys_sts;
+	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
+	if(ret) return ret;	
+	sys_sts = (tmp >> 6) & 0x03;
+	return sysfs_emit(buf, "%d\n", sys_sts);
+}
+
+static ssize_t bno055_gyr_status_calibration_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int tmp,gyr_sts;
+	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
+	if(ret) return ret;	
+	gyr_sts = (tmp >> 4) & 0x03;
+	return sysfs_emit(buf, "%d\n", gyr_sts);
+}
+
+static ssize_t bno055_acc_status_calibration_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int tmp,acc_sts;
+	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
+	if(ret) return ret;	
+	acc_sts = (tmp >> 2) & 0x03;
+	return sysfs_emit(buf, "%d\n", acc_sts);
+}
+
+static ssize_t bno055_mag_status_calibration_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int tmp,mag_sts;
+	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
+	if(ret) return ret;	
+	mag_sts = tmp & 0x03;
+	return sysfs_emit(buf, "%d\n", mag_sts);
+}
+
+static ssize_t bno055_calibration_status_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int tmp;
+	int sys_sts,acc_sts,gyr_sts,mag_sts;
+	int isOk;
+	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
+	if(ret) return ret;
+	sys_sts = (tmp >> 6) & 0x03;
+	gyr_sts = (tmp >> 4) & 0x03;
+	acc_sts = (tmp >> 2) & 0x03;
+	mag_sts = tmp & 0x03;
+	if(sys_sts == 3 && gyr_sts == 3 && acc_sts == 3 && mag_sts== 3){
+		isOk = 1;
+	}
+	else{
+		isOk = 0;
+	}
+	 return sysfs_emit(buf, "%d\n", isOk);
+}
+
+static ssize_t bno055_chip_id_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	int ret;
+	int sw_lsb, sw_msb;
+	int acc, gyr, mag, bl;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+
+	/* Read SW revision */
+	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_LSB, &sw_lsb);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(priv->regmap, BNO055_REG_SW_REV_ID_MSB, &sw_msb);
+	if (ret)
+		return ret;
+
+	/* Read sensor IDs */
+	ret = regmap_read(priv->regmap, BNO055_REG_ACC_ID, &acc);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(priv->regmap, BNO055_REG_GYR_ID, &gyr);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(priv->regmap, BNO055_REG_MAG_ID, &mag);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(priv->regmap, BNO055_REG_BL_REV_ID, &bl);
+	if (ret)
+		return ret;
+
+	/* Optional warning */
+	if (sw_msb != 0x03 || sw_lsb != 0x11)
+		dev_warn(dev, "Untested firmware version\n");
+
+	/* Return string to userspace */
+	return sysfs_emit(buf,
+		"SW_REV: 0x%02X%02X\n"
+		"CHIP_ID: 0x%02X\n"
+		"ACC_ID:  0x%02X\n"
+		"GYR_ID:  0x%02X\n"
+		"MAG_ID:  0x%02X\n"
+		"BL_REV:  0x%02X\n",
+		sw_msb, sw_lsb,
+		priv->id.CHIP_ID,
+		acc, gyr, mag, bl);
+}
+
+static bool isCalibrationReady(struct bno055_priv *priv){
+	int tmp;
+	int sys_sts,acc_sts,gyr_sts,mag_sts;
+	int isOk;
+	int ret;
+	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
+	if(ret) return ret;
+	sys_sts = (tmp >> 6) & 0x03;
+	gyr_sts = (tmp >> 4) & 0x03;
+	acc_sts = (tmp >> 2) & 0x03;
+	mag_sts = tmp & 0x03;
+	if(sys_sts == 3 && gyr_sts == 3 && acc_sts == 3 && mag_sts== 3){
+		isOk = 1;
+	}
+	else{
+		isOk = 0;
+	}
+	return isOk;
+}
+
+static ssize_t bno055_acc_calibration_offset_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	/*Check Mode*/
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if(ret) return ret;
+	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	/*Check Status*/
+	if(!isCalibrationReady(priv)) return -EBUSY;
+	/*get calibration*/
+	/* Read ACC offsets (LSB + MSB) */
+	u8 raw[6];
+	s16 x, y, z;
+	ret = regmap_bulk_read(priv->regmap,
+				BNO055_REG_ACC_OFFSET_X_LSB,
+				raw, 6);
+	if (ret)
+		return ret;
+	/* Combine */
+	x = (s16)((raw[1] << 8) | raw[0]);
+	y = (s16)((raw[3] << 8) | raw[2]);
+	z = (s16)((raw[5] << 8) | raw[4]);	
+	return sysfs_emit(buf, "%d %d %d\n", x, y, z);
+}
+
+static ssize_t bno055_acc_calibration_offset_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	int x, y, z;
+	u8 raw[6];
+
+	/* Parse input: "x y z" */
+	ret = sscanf(buf, "%d %d %d", &x, &y, &z);
+	if (ret != 3)
+		return -EINVAL;
+
+	/* Check mode */
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if (ret)
+		return ret;
+
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
+
+	/* Convert s16 -> LSB/MSB */
+	raw[0] = x & 0xFF;
+	raw[1] = (x >> 8) & 0xFF;
+
+	raw[2] = y & 0xFF;
+	raw[3] = (y >> 8) & 0xFF;
+
+	raw[4] = z & 0xFF;
+	raw[5] = (z >> 8) & 0xFF;
+
+	/* Write 6 bytes liên tiếp */
+	ret = regmap_bulk_write(priv->regmap,
+				BNO055_REG_ACC_OFFSET_X_LSB,
+				raw, 6);
+	if (ret)
+		return ret;
+
+	return len;
+}
+
+
+static ssize_t bno055_gyr_calibration_offset_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	/*Check Mode*/
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if(ret) return ret;
+	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	/*Check Status*/
+	if(!isCalibrationReady(priv)) return -EBUSY;
+	/*get calibration*/
+	/* Read GYR offsets (LSB + MSB) */
+	u8 raw[6];
+	s16 x, y, z;
+	ret = regmap_bulk_read(priv->regmap,
+				BNO055_REG_GYR_OFFSET_X_LSB,
+				raw, 6);
+	if (ret)
+		return ret;
+	/* Combine */
+	x = (s16)((raw[1] << 8) | raw[0]);
+	y = (s16)((raw[3] << 8) | raw[2]);
+	z = (s16)((raw[5] << 8) | raw[4]);	
+	return sysfs_emit(buf, "%d %d %d\n", x, y, z);
+}
+
+static ssize_t bno055_gyr_calibration_offset_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	int x, y, z;
+	u8 raw[6];
+
+	/* Parse input: "x y z" */
+	ret = sscanf(buf, "%d %d %d", &x, &y, &z);
+	if (ret != 3)
+		return -EINVAL;
+
+	/* Check mode */
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if (ret)
+		return ret;
+
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
+
+	/* Convert s16 -> LSB/MSB */
+	raw[0] = x & 0xFF;
+	raw[1] = (x >> 8) & 0xFF;
+
+	raw[2] = y & 0xFF;
+	raw[3] = (y >> 8) & 0xFF;
+
+	raw[4] = z & 0xFF;
+	raw[5] = (z >> 8) & 0xFF;
+
+	/* Write 6 bytes liên tiếp */
+	ret = regmap_bulk_write(priv->regmap,
+				BNO055_REG_GYR_OFFSET_X_LSB,
+				raw, 6);
+	if (ret)
+		return ret;
+
+	return len;
+}
+
+static ssize_t bno055_mag_calibration_offset_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	/*Check Mode*/
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if(ret) return ret;
+	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	/*Check Status*/
+	if(!isCalibrationReady(priv)) return -EBUSY;
+	/*get calibration*/
+	/* Read MAG offsets (LSB + MSB) */
+	u8 raw[6];
+	s16 x, y, z;
+	ret = regmap_bulk_read(priv->regmap,
+				BNO055_REG_MAG_OFFSET_X_LSB,
+				raw, 6);
+	if (ret)
+		return ret;
+	/* Combine */
+	x = (s16)((raw[1] << 8) | raw[0]);
+	y = (s16)((raw[3] << 8) | raw[2]);
+	z = (s16)((raw[5] << 8) | raw[4]);	
+	return sysfs_emit(buf, "%d %d %d\n", x, y, z);
+}
+
+static ssize_t bno055_mag_calibration_offset_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	int x, y, z;
+	u8 raw[6];
+
+	/* Parse input: "x y z" */
+	ret = sscanf(buf, "%d %d %d", &x, &y, &z);
+	if (ret != 3)
+		return -EINVAL;
+
+	/* Check mode */
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if (ret)
+		return ret;
+
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
+
+	/* Convert s16 -> LSB/MSB */
+	raw[0] = x & 0xFF;
+	raw[1] = (x >> 8) & 0xFF;
+
+	raw[2] = y & 0xFF;
+	raw[3] = (y >> 8) & 0xFF;
+
+	raw[4] = z & 0xFF;
+	raw[5] = (z >> 8) & 0xFF;
+
+	/* Write 6 bytes liên tiếp */
+	ret = regmap_bulk_write(priv->regmap,
+				BNO055_REG_MAG_OFFSET_X_LSB,
+				raw, 6);
+	if (ret)
+		return ret;
+
+	return len;
+}
+
+static ssize_t bno055_accradius_calibration_offset_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	/*Check Mode*/
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if(ret) return ret;
+	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	/*Check Status*/
+	if(!isCalibrationReady(priv)) return -EBUSY;
+	/*get calibration*/
+	/* Read MAG offsets (LSB + MSB) */
+	u8 raw[2];
+	s16 accradius;
+	ret = regmap_bulk_read(priv->regmap,
+				BNO055_REG_ACC_RADIUS_LSB,
+				raw, 2);
+	if (ret)
+		return ret;
+	/* Combine */
+	accradius = (s16)((raw[1] << 8) | raw[0]);
+	return sysfs_emit(buf, "%d\n", accradius);
+}
+
+static ssize_t bno055_accradius_calibration_offset_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	int accradius;
+	u8 raw[2];
+
+	/* Parse input: "x y z" */
+	ret = sscanf(buf, "%d",&accradius);
+	if (ret != 3)
+		return -EINVAL;
+
+	/* Check mode */
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if (ret)
+		return ret;
+
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	}  
+
+	/* Convert s16 -> LSB/MSB */
+	raw[0] = accradius & 0xFF;
+	raw[1] = (accradius >> 8) & 0xFF;
+
+	/* Write 2 bytes liên tiếp */
+	ret = regmap_bulk_write(priv->regmap,
+				BNO055_REG_ACC_RADIUS_LSB,
+				raw, 2);
+	if (ret)
+		return ret;
+
+	return len;
+}
+
+
+static ssize_t bno055_magradius_calibration_offset_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	/*Check Mode*/
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if(ret) return ret;
+	if(cur_mode!=BNO055_OPR_MODE_CONFIG) return -EBUSY;
+	/*Check Status*/
+	if(!isCalibrationReady(priv)) return -EBUSY;
+	/*get calibration*/
+	/* Read MAG offsets (LSB + MSB) */
+	u8 raw[2];
+	s16 magradius;
+	ret = regmap_bulk_read(priv->regmap,
+				BNO055_REG_MAG_RADIUS_LSB,
+				raw, 2);
+	if (ret)
+		return ret;
+	/* Combine */
+	magradius = (s16)((raw[1] << 8) | raw[0]);
+	return sysfs_emit(buf, "%d\n", magradius);
+}
+
+static ssize_t bno055_magradius_calibration_offset_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int ret;
+	int cur_mode;
+	int magradius;
+	u8 raw[2];
+
+	/* Parse input: "x y z" */
+	ret = sscanf(buf, "%d",&magradius);
+	if (ret != 3)
+		return -EINVAL;
+
+	/* Check mode */
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
+	if (ret)
+		return ret;
+
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+		dev_warn(dev, "Please move to CONFIG MODE\n");
+		return -EBUSY;
+	} 
+
+	/* Convert s16 -> LSB/MSB */
+	raw[0] = magradius & 0xFF;
+	raw[1] = (magradius >> 8) & 0xFF;
+
+	/* Write 2 bytes liên tiếp */
+	ret = regmap_bulk_write(priv->regmap,
+				BNO055_REG_MAG_RADIUS_LSB,
+				raw, 2);
+	if (ret)
+		return ret;
+
+	return len;
+}
+
+static IIO_DEVICE_ATTR(bno055_chip_id, 0444,bno055_chip_id_show,NULL,0);
+static IIO_DEVICE_ATTR(bno055_sys_status_calibration, 0444,bno055_sys_status_calibration_show,NULL,0);
+static IIO_DEVICE_ATTR(bno055_gyr_status_calibration, 0444,bno055_gyr_status_calibration_show,NULL,0);
+static IIO_DEVICE_ATTR(bno055_acc_status_calibration, 0444,bno055_acc_status_calibration_show,NULL,0);
+static IIO_DEVICE_ATTR(bno055_mag_status_calibration, 0444,bno055_mag_status_calibration_show,NULL,0);
+static IIO_DEVICE_ATTR(bno055_calibration_status, 0444,bno055_calibration_status_show,NULL,0);
+
 static IIO_DEVICE_ATTR_RW(bno055_opr_mode, 0);
+static IIO_DEVICE_ATTR_RW(bno055_acc_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_gyr_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_mag_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_accradius_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_magradius_calibration_offset, 0);
+
 // static IIO_DEVICE_ATTR_RW(in_magn_calibration_fast_enable, 0);
 // static IIO_DEVICE_ATTR_RW(in_accel_range_raw, 0);
 
 // static IIO_DEVICE_ATTR_RO(in_accel_range_raw_available, 0);
-// static IIO_DEVICE_ATTR_RO(sys_calibration_auto_status, 0);
-// static IIO_DEVICE_ATTR_RO(in_accel_calibration_auto_status, 0);
-// static IIO_DEVICE_ATTR_RO(in_gyro_calibration_auto_status, 0);
-// static IIO_DEVICE_ATTR_RO(in_magn_calibration_auto_status, 0);
-// static IIO_DEVICE_ATTR_RO(serialnumber, 0);
 
 static struct attribute *bno055dev_attrs[] = {
+	&iio_dev_attr_bno055_chip_id.dev_attr.attr, //ok
 	&iio_dev_attr_bno055_opr_mode.dev_attr.attr, //ok
-	// &iio_dev_attr_in_accel_range_raw_available.dev_attr.attr,
-	// &iio_dev_attr_in_accel_range_raw.dev_attr.attr,
-	// &iio_dev_attr_in_magn_calibration_fast_enable.dev_attr.attr,
-	// &iio_dev_attr_sys_calibration_auto_status.dev_attr.attr,
-	// &iio_dev_attr_in_accel_calibration_auto_status.dev_attr.attr,
-	// &iio_dev_attr_in_gyro_calibration_auto_status.dev_attr.attr,
-	// &iio_dev_attr_in_magn_calibration_auto_status.dev_attr.attr,
-	// &iio_dev_attr_serialnumber.dev_attr.attr,
+	&iio_dev_attr_bno055_sys_status_calibration.dev_attr.attr,
+	&iio_dev_attr_bno055_gyr_status_calibration.dev_attr.attr,
+	&iio_dev_attr_bno055_acc_status_calibration.dev_attr.attr,
+	&iio_dev_attr_bno055_mag_status_calibration.dev_attr.attr,
+	&iio_dev_attr_bno055_acc_calibration_offset.dev_attr.attr,
+	&iio_dev_attr_bno055_gyr_calibration_offset.dev_attr.attr,
+	&iio_dev_attr_bno055_mag_calibration_offset.dev_attr.attr,
+	&iio_dev_attr_bno055_accradius_calibration_offset.dev_attr.attr,
+	&iio_dev_attr_bno055_magradius_calibration_offset.dev_attr.attr,
 	NULL
 };
 
@@ -1027,47 +1563,6 @@ static int bno055_set_opr_mode(struct bno055_priv *priv, enum bno055_opr_mode op
 	priv->opr_mode = opr_mode;
 	return ret;
 }
-
-/* ================= SYSFS MODE ================= */
-// static ssize_t bno055_mode_show(struct device *dev,
-// 				struct device_attribute *attr,
-// 				char *buf)
-// {
-// 	struct bno055_priv *priv = dev_get_drvdata(dev);
-// 	int i;
-
-// 	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++)
-// 		if (bno055_modes[i].val == priv->opr_mode)
-// 			return sprintf(buf, "%s\n", bno055_modes[i].name);
-
-// 	return sprintf(buf, "UNKNOWN\n");
-// }
-
-
-// static ssize_t bno055_mode_store(struct device *dev,	
-// 				 struct device_attribute *attr,
-// 				 const char *buf, size_t count)
-// {
-// 	struct bno055_priv *priv = dev_get_drvdata(dev);
-// 	int i, ret;
-
-// 	mutex_lock(&priv->lock);
-
-// 	for (i = 0; i < ARRAY_SIZE(bno055_modes); i++) {
-// 		if (sysfs_streq(buf, bno055_modes[i].name)) {
-// 			ret = bno055_set_opr_mode(st,
-// 						 bno055_modes[i].val);
-// 			mutex_unlock(&st->lock);
-// 			return ret ? ret : count;
-// 		}
-// 	}
-
-// 	mutex_unlock(&st->lock);
-// 	return -EINVAL;
-// }
-
-// static DEVICE_ATTR_RW(bno055_mode);
-
 
 static int bno055_system_reset(struct bno055_priv *priv){
 	int ret;
