@@ -12,7 +12,7 @@ index 09ea639..ffe4698 100644
 +    clock-frequency = <100000>;
 +    bno055@28 {
 +		status = "okay";
-+		compatible = "bosch,bno055";
++		compatible = "desmtiny,bno055";
 +		reg = <0x28>;
 +	};
 +};

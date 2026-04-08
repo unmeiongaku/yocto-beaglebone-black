@@ -5,7 +5,7 @@
 
 #include "bno055.h"
 
-#define DRIVER_NAME   "bno055"
+#define DRIVER_NAME   "bno055dev"
 
 static int bno055_i2c_probe(struct i2c_client *client)
 {
@@ -19,7 +19,7 @@ static int bno055_i2c_probe(struct i2c_client *client)
 }
 
 static const struct of_device_id bno055_of_match[] = {
-	{ .compatible = "bosch,bno055" },
+	{ .compatible = "desmtiny,bno055" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, bno055_of_match);

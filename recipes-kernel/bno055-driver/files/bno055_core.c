@@ -9,7 +9,7 @@
 #include "bno055.h"
 
 
-#define DRIVER_NAME   "bno055_dev"
+#define DRIVER_NAME   "bno055dev"
 #define DRIVER_AUTHOR "desmtiny nguyenhoangminh@gmail.com"
 #define DRIVER_DESC   "BoshBosch BNO055 IMU Driver"
 #define DRIVER_VERS   "1.0"
@@ -22,7 +22,7 @@ static bool bno055_regmap_writeable(struct device *dev, unsigned int reg);
 static int bno055_get_chip_id(struct bno055_priv *priv);
 static int bno055_set_page_id(struct bno055_priv *priv, enum bno055_page_id tar_page_id);
 static int bno055_set_opr_mode(struct bno055_priv *priv,enum bno055_opr_mode opr_mode);
-
+static int bno055_read_opr_mode(struct bno055_priv *priv,int *mode);
 /*Config Function*/
 static int bno_axis_remap_config(struct bno055_priv *priv,enum bno055_axis_remap_config  axis_remap_config);
 static int bno_axis_remap_sign(struct bno055_priv *priv,enum bno055_axis_remap_sign  axis_remap_sign);
@@ -776,11 +776,11 @@ static int bno055_write_raw(struct iio_dev *iio_dev,
 }
 
 /*binary sysfs*/ 
-static const char *bno055_mode_str[] = {
+static const char * const bno055_mode_str[] = {
 	"CONFIG",
 	"ACCONLY",
 	"MAGONLY",
-	"GYRONLY",
+	"GYROONLY",
 	"ACCMAG",
 	"ACCGYRO",
 	"MAGGYRO",
@@ -792,71 +792,90 @@ static const char *bno055_mode_str[] = {
 	"NDOF",
 };
 
-static ssize_t operation_mode_show(struct device *dev,
-				  struct device_attribute *attr,
-				  char *buf)
+static ssize_t bno055_opr_mode_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
 {
-	struct bno055_priv *priv = iio_priv(dev_to_iio_dev(dev));
-
-	if (priv->opr_mode < ARRAY_SIZE(bno055_mode_str))
-		return sysfs_emit(buf, "%d %s\n",
-				 priv->opr_mode,
-				 bno055_mode_str[priv->opr_mode]);
-
-	return sysfs_emit(buf, "UNKNOWN\n");
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	u8 mode = priv->opr_mode;
+	int mode_reg = 0;
+	ret = bno055_read_opr_mode(priv,&mode_reg);
+	if(ret) return ret;
+	if(mode_reg != priv->opr_mode){
+		priv->opr_mode = mode_reg;
+	}
+	if (mode < ARRAY_SIZE(bno055_mode_str))
+			return sysfs_emit(buf, "%u (%s)\n",
+					mode, bno055_mode_str[mode]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", mode);
 }
 
-static ssize_t operation_mode_store(struct device *dev,
-				  struct device_attribute *attr,
-				  char *buf)
+static ssize_t bno055_opr_mode_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
 {
 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
 	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
 
+	ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+	if (val > BNO055_OPR_MODE_NDOF){
+		return -EINVAL;
+	}
+		
+	ret = bno055_set_opr_mode(priv,val);
+	if (ret)
+		return ret;
+	return len;
 }
 
+static IIO_DEVICE_ATTR_RW(bno055_opr_mode, 0);
+// static IIO_DEVICE_ATTR_RW(in_magn_calibration_fast_enable, 0);
+// static IIO_DEVICE_ATTR_RW(in_accel_range_raw, 0);
 
-static IIO_DEVICE_ATTR_RW(operation_mode, 0);
-static IIO_DEVICE_ATTR_RW(in_magn_calibration_fast_enable, 0);
-static IIO_DEVICE_ATTR_RW(in_accel_range_raw, 0);
+// static IIO_DEVICE_ATTR_RO(in_accel_range_raw_available, 0);
+// static IIO_DEVICE_ATTR_RO(sys_calibration_auto_status, 0);
+// static IIO_DEVICE_ATTR_RO(in_accel_calibration_auto_status, 0);
+// static IIO_DEVICE_ATTR_RO(in_gyro_calibration_auto_status, 0);
+// static IIO_DEVICE_ATTR_RO(in_magn_calibration_auto_status, 0);
+// static IIO_DEVICE_ATTR_RO(serialnumber, 0);
 
-static IIO_DEVICE_ATTR_RO(in_accel_range_raw_available, 0);
-static IIO_DEVICE_ATTR_RO(sys_calibration_auto_status, 0);
-static IIO_DEVICE_ATTR_RO(in_accel_calibration_auto_status, 0);
-static IIO_DEVICE_ATTR_RO(in_gyro_calibration_auto_status, 0);
-static IIO_DEVICE_ATTR_RO(in_magn_calibration_auto_status, 0);
-static IIO_DEVICE_ATTR_RO(serialnumber, 0);
-
-static struct attribute *bno055_attrs[] = {
-	&iio_dev_attr_in_accel_range_raw_available.dev_attr.attr,
-	&iio_dev_attr_in_accel_range_raw.dev_attr.attr,
-	&iio_dev_attr_operation_mode.dev_attr.attr, //ok
-	&iio_dev_attr_in_magn_calibration_fast_enable.dev_attr.attr,
-	&iio_dev_attr_sys_calibration_auto_status.dev_attr.attr,
-	&iio_dev_attr_in_accel_calibration_auto_status.dev_attr.attr,
-	&iio_dev_attr_in_gyro_calibration_auto_status.dev_attr.attr,
-	&iio_dev_attr_in_magn_calibration_auto_status.dev_attr.attr,
-	&iio_dev_attr_serialnumber.dev_attr.attr,
+static struct attribute *bno055dev_attrs[] = {
+	&iio_dev_attr_bno055_opr_mode.dev_attr.attr, //ok
+	// &iio_dev_attr_in_accel_range_raw_available.dev_attr.attr,
+	// &iio_dev_attr_in_accel_range_raw.dev_attr.attr,
+	// &iio_dev_attr_in_magn_calibration_fast_enable.dev_attr.attr,
+	// &iio_dev_attr_sys_calibration_auto_status.dev_attr.attr,
+	// &iio_dev_attr_in_accel_calibration_auto_status.dev_attr.attr,
+	// &iio_dev_attr_in_gyro_calibration_auto_status.dev_attr.attr,
+	// &iio_dev_attr_in_magn_calibration_auto_status.dev_attr.attr,
+	// &iio_dev_attr_serialnumber.dev_attr.attr,
 	NULL
 };
 
-static BIN_ATTR_RO(calibration_data, BNO055_CALDATA_LEN);
+// static BIN_ATTR_RO(calibration_data, BNO055_CALDATA_LEN);
 
-static struct bin_attribute *bno055_bin_attrs[] = {
-	&bin_attr_calibration_data,
-	NULL
-};
+// static struct bin_attribute *bno055dev_bin_attrs[] = {
+// 	&bin_attr_calibration_data,
+// 	NULL
+// };
 
-static const struct attribute_group bno055_attrs_group = {
-	.attrs = bno055_attrs,
-	.bin_attrs = bno055_bin_attrs,
+static const struct attribute_group bno055dev_attrs_group = {
+	.attrs = bno055dev_attrs,
+	// .bin_attrs = bno055dev_bin_attrs,
 };
 
 static const struct iio_info bno055dev_info = {
 	.read_raw_multi = bno055_read_raw_multi,
 	.read_avail = bno055_read_avail,
 	.write_raw  = bno055_write_raw,
-	.attrs = &bno055_attrs_group,
+	.attrs = &bno055dev_attrs_group,
 };
 
 
@@ -953,6 +972,17 @@ static int bno055_get_chip_id(struct bno055_priv *priv)
 
 
 /* ================= SET MODE ================= */
+static int bno055_read_opr_mode(struct bno055_priv *priv,int *mode){
+	int ret;
+	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE,mode);
+	if(ret){
+		dev_err(priv->dev, "Failed to read current Mode\n");
+		return ret;
+	}
+	return 0;
+}
+
+
 static int bno055_set_opr_mode(struct bno055_priv *priv, enum bno055_opr_mode opr_mode){
 	int ret;
 	int cur_mode;
