@@ -4,6 +4,7 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 // ===== PATH =====
 #define BASE "/sys/bus/iio/devices/iio:device0/"
@@ -11,6 +12,8 @@
 #define ACC_X BASE "in_accel_x_raw"
 #define ACC_Y BASE "in_accel_y_raw"
 #define ACC_Z BASE "in_accel_z_raw"
+
+#define ACC_SCALE BASE "in_accel_scale"
 
 #define GYR_X BASE "in_anglvel_x_raw"
 #define GYR_Y BASE "in_anglvel_y_raw"
@@ -34,24 +37,31 @@ void menu()
 
     printf("====== BNO055 TEST TOOL ======\n");
     printf("[SENSOR]\n");
-    printf(" 1. Acceleration\n");
-    printf(" 2. Gyroscope\n");
-    printf(" 3. Magnetometer\n");
-    printf(" 4. Quaternion\n");
-    printf(" 5. Euler\n");
-    printf(" 6. Linear Accel\n");
-    printf(" 7. Gravity\n");
-    printf(" 8. Temperature\n");
+    printf(" 1. Acceleration{raw}\n");
+    printf(" 2. Acceleration{scale}\n");
+    printf(" 3. Gyroscope{raw}\n");
+    printf(" 4. Gyroscope{scale}\n");
+    printf(" 5. Magnetometer{raw}\n");
+    printf(" 6. Magnetometer{scale}\n");
+    printf(" 7. Quaternion{raw}\n");
+    printf(" 8. Quaternion{scale}\n");
+    printf(" 9. Euler{raw}\n");
+    printf(" 10. Euler{scale}\n");
+    printf(" 11. Linear Accel{raw}\n");
+    printf(" 12. Linear Accel{scale}\n");
+    printf(" 13. Gravity{raw}\n");
+    printf(" 14. Gravity{scale}\n");
+    printf(" 15. Temperature\n");
 
     printf("\n[SYSTEM]\n");
-    printf(" 9.  Read ALL (stream)\n");
-    printf("10. Calibration Offset\n");
-    printf("11. Calibration Status\n");
+    printf(" 16.  Read ALL (stream)\n");
+    printf(" 17. Calibration Offset\n");
+    printf(" 18. Calibration Status\n");
 
     printf("\n[CONTROL]\n");
-    printf("12. Get Mode\n");
-    printf("13. Set Mode\n");
-    printf("14. Chip ID\n");
+    printf(" 19. Get Mode\n");
+    printf(" 20. Set Mode\n");
+    printf(" 21. Chip ID\n");
 
     printf("\n 0. Exit\n");
     printf("Select: ");
@@ -73,6 +83,17 @@ int read_val(const char *path)
     return atoi(buf);
 }
 
+float read_val_float(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) return -1.0f;
+
+    char buf[64];
+    fgets(buf, sizeof(buf), f);
+    fclose(f);
+
+    return strtof(buf, NULL);
+}
 
 // ===== NON-BLOCKING KEY =====
 void set_nonblocking(int enable)
@@ -139,16 +160,37 @@ void stream_all()
     }
 
     set_nonblocking(0);
-    printf("\nExit stream.\n");
+    //printf("\nExit stream.\n");
 }
 
 // ===== READ ONCE =====
-void read_acc()
+void read_acc(int i)
 {
-    printf("ACC: %d %d %d\n",
-           read_val(ACC_X),
-           read_val(ACC_Y),
-           read_val(ACC_Z));
+    float xc,yc,zc,scale;
+    int x,y,z;
+    scale = read_val_float(ACC_SCALE);
+    printf("Press 'q' to quit...\n");
+    set_nonblocking(1);
+    while(1){
+        if(i == 1){
+            xc = (float)(read_val(ACC_X)*scale);
+            yc = (float)(read_val(ACC_Y)*scale);
+            zc = (float)(read_val(ACC_Z)*scale);  
+            printf("\r\033[KACC: X=%7.2f  Y=%7.2f  Z=%7.2f SCALE=%7.2f", xc, yc, zc,scale);
+        }
+        else if(i==0){
+            x = read_val(ACC_X);
+            y = read_val(ACC_Y);
+            z = read_val(ACC_Z); 
+            printf("\r\033[KACC: X=%d Y=%d Z=%d", x, y, z);
+        }
+
+        fflush(stdout);
+        char c = getchar();
+        if (c == 'q') break;
+        usleep(100000); // 100ms
+    }
+    set_nonblocking(0);
 }
 
 int main()
@@ -160,11 +202,11 @@ int main()
 
         switch (choice) {
         case 1:
-            read_acc();
+            read_acc(0);
             break;
 
         case 2:
-            stream_all();
+            read_acc(1);
             break;
 
         case 0:

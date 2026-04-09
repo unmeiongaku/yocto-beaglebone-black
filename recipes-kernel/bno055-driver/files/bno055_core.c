@@ -30,7 +30,7 @@ static int bno_axis_pwr_mode(struct bno055_priv *priv,enum bno055_power_mode  po
 static int bno_acc_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode );
 static int bno_gyr_config(struct bno055_priv *priv,int g_range,int Bandwidth,int OPRMode );
 static int bno_mag_config(struct bno055_priv *priv,int data_rate,int OPRMode,int PWRMode);
-static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  fusion_dof);
+static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  ori);
 static int bno_set_temperature_src(struct bno055_priv *priv,enum bno055_temp_source temp_source);
 
 static int bno055_init(struct bno055_priv *priv);
@@ -251,6 +251,22 @@ static const struct bno055_mode_map bno055_modes[] = {
 }
 
 
+#define BNO055_QUA_CHANNEL(_type, _axis, _index, _address) {   \
+	.address = _address,                                   \
+	.type = _type,                                         \
+	.modified = 1,                                         \
+	.channel2 = IIO_MOD_##_axis,                           \
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |         \
+			       BIT(IIO_CHAN_INFO_SCALE),      \
+	.scan_index = _index,                                  \
+	.scan_type = {                                         \
+		.sign = 's',                                       \
+		.realbits = 16,                                    \
+		.storagebits = 16,                                 \
+		.endianness = IIO_LE,                              \
+		.repeat = 4,                                       \
+	},                                                     \
+}
 
 /* scan indexes follow DATA register order */
 enum bno055_scan_axis {
@@ -329,14 +345,14 @@ static const struct iio_chan_spec bno055_channels[] = {
 	BNO055_CHANNEL(IIO_ROT, PITCH, BNO055_SCAN_PITCH,
 		       		BNO055_REG_EUL_PITCH_LSB, 0, 0, 0),
 	/* ================= quaternion ================= */
-	BNO055_CHANNEL(IIO_ROT, QUATERNION, BNO055_SCAN_QUATERNION,
-		       		BNO055_REG_QUA_DATA_W_LSB, 0, 0, 0),	
+	BNO055_QUA_CHANNEL(IIO_ROT, QUATERNION, BNO055_SCAN_QUATERNION,
+		       		BNO055_REG_QUA_DATA_W_LSB),	
 	/* ================= linear acceleration ================= */
 	BNO055_CHANNEL(IIO_ACCEL, LINEAR_X, BNO055_SCAN_LIA_X,
 		      	 	BNO055_REG_LIA_DATA_X_LSB, 0, 0, 0),
-	BNO055_CHANNEL(IIO_ACCEL, LINEAR_Y, BNO055_SCAN_LIA_X,
+	BNO055_CHANNEL(IIO_ACCEL, LINEAR_Y, BNO055_SCAN_LIA_Y,
 		       		BNO055_REG_LIA_DATA_Y_LSB, 0, 0, 0),
-	BNO055_CHANNEL(IIO_ACCEL, LINEAR_Z, BNO055_SCAN_LIA_X,
+	BNO055_CHANNEL(IIO_ACCEL, LINEAR_Z, BNO055_SCAN_LIA_Z,
 		       		BNO055_REG_LIA_DATA_Z_LSB, 0, 0, 0),
 	/* ================= gravity vector =================*/
 	BNO055_CHANNEL(IIO_GRAVITY,X, BNO055_SCAN_GRAVITY_X,
@@ -411,8 +427,7 @@ static int bno055_read_simple_chan(struct iio_dev *indio_dev,
 					* beginning of this file.
 					*/
 					if(priv->opr_mode != BNO055_OPR_MODE_AMG){
-						*val = bno055_gyr_scale.fusion_vals[0];
-						*val2 = bno055_gyr_scale.fusion_vals[1];
+						*val2 = priv->scale.gyro;
 						return IIO_VAL_FRACTIONAL;
 					}
 					// *val2 = priv->scale.gyro;
@@ -420,7 +435,7 @@ static int bno055_read_simple_chan(struct iio_dev *indio_dev,
 					break;	
 				case IIO_ROT:
 					/* Table 3-28: 1 degree = 16 LSB */
-					*val2 = 16;
+					*val2 = priv->scale.euler;
 					break;
 				default:
 					return -EINVAL;
@@ -792,6 +807,31 @@ static const char * const bno055_mode_str[] = {
 	"NDOF",
 };
 
+static const char * const bno055_acc_unit_str[] = {
+	"MSG",
+	"MG"
+};
+
+static const char * const bno055_angular_rate_unit_str[] = {
+	"DPS",
+	"RPS"
+};
+
+static const char * const bno055_euler_unit_str[] = {
+	"DEGREES",
+	"RADIANS"
+};
+
+static const char * const bno055_temp_unit_str[] = {
+	"C",
+	"F"
+};
+
+static const char * const bno055_fusion_ori_str[] = {
+	"WINDOWS",
+	"ANDROID"
+};
+
 static ssize_t bno055_opr_mode_show(struct device *dev,
 				    struct device_attribute *attr,
 				    char *buf)
@@ -960,7 +1000,7 @@ static ssize_t bno055_chip_id_show(struct device *dev,
 
 	/* Return string to userspace */
 	return sysfs_emit(buf,
-		"SW_REV: 0x%02X%02X\n"
+		"SW_REV:  %02X%02X\n"
 		"CHIP_ID: 0x%02X\n"
 		"ACC_ID:  0x%02X\n"
 		"GYR_ID:  0x%02X\n"
@@ -1243,7 +1283,7 @@ static ssize_t bno055_accradius_calibration_offset_show(struct device *dev,
 	/*Check Mode*/
 	ret = regmap_read(priv->regmap, BNO055_REG_OPR_MODE, &cur_mode);
 	if(ret) return ret;
-		if (cur_mode != BNO055_OPR_MODE_CONFIG) {
+	if (cur_mode != BNO055_OPR_MODE_CONFIG) {
 		dev_warn(dev, "Please move to CONFIG MODE\n");
 		return -EBUSY;
 	} 
@@ -1337,6 +1377,7 @@ static ssize_t bno055_magradius_calibration_offset_show(struct device *dev,
 	return sysfs_emit(buf, "%d\n", magradius);
 }
 
+
 static ssize_t bno055_magradius_calibration_offset_store(struct device *dev,
 				     struct device_attribute *attr,
 				     const char *buf,
@@ -1378,19 +1419,350 @@ static ssize_t bno055_magradius_calibration_offset_store(struct device *dev,
 	return len;
 }
 
+#define BNO055_UNIT_ACC_MASK   BIT(0)
+#define BNO055_UNIT_GYR_MASK   BIT(1)
+#define BNO055_UNIT_EUL_MASK   BIT(2)
+#define BNO055_UNIT_TEMP_MASK  BIT(4)
+#define BNO055_UNIT_ORI_MASK   BIT(7)
+
+static ssize_t bno055_acc_unit_config_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	int unit,acc;
+	ret = regmap_read(priv->regmap, BNO055_REG_UNIT_SEL, &unit);
+	if(ret) return ret;
+	acc  = !!(unit & BNO055_UNIT_ACC_MASK);
+	if (acc < ARRAY_SIZE(bno055_acc_unit_str))
+			return sysfs_emit(buf, "%u (%s)\n",
+					acc, bno055_acc_unit_str[acc]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", acc);
+}
+
+static ssize_t bno055_acc_unit_config_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+	if (val > ARRAY_SIZE(bno055_acc_unit_str) && val > 0){
+		return -EINVAL;
+	}
+	priv->acc_gyr_mag_valuation.acc_linearacc_gravityvector_unit = val; 
+	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL, &val);
+	if (ret)
+		return ret;
+	return len;
+}
+
+static ssize_t bno055_angular_unit_config_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	int unit,angular;
+	ret = regmap_read(priv->regmap, BNO055_REG_UNIT_SEL, &unit);
+	if(ret) return ret;
+	angular  = !!(unit & BNO055_UNIT_GYR_MASK);
+	if (angular < ARRAY_SIZE(bno055_angular_rate_unit_str))
+			return sysfs_emit(buf, "%u (%s)\n",
+					angular, bno055_angular_rate_unit_str[angular]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", angular);
+}
+
+static ssize_t bno055_angular_unit_config_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+	if (val > ARRAY_SIZE(bno055_angular_rate_unit_str) && val > 0){
+		return -EINVAL;
+	}
+	priv->acc_gyr_mag_valuation.angular_rate_gyr_unit = val;
+	val = val << 1;
+	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL, &val);
+	if (ret)
+		return ret;
+	return len;
+}
+
+static ssize_t bno055_euler_unit_config_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	int unit,euler;
+	ret = regmap_read(priv->regmap, BNO055_REG_UNIT_SEL, &unit);
+	if(ret) return ret;
+	euler  = !!(unit & BNO055_UNIT_EUL_MASK);
+	if (euler < ARRAY_SIZE(bno055_euler_unit_str))
+			return sysfs_emit(buf, "%u (%s)\n",
+					euler, bno055_euler_unit_str[euler]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", euler);
+}
+
+static ssize_t bno055_euler_unit_config_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+	if (val > ARRAY_SIZE(bno055_euler_unit_str) && val > 0){
+		return -EINVAL;
+	}
+	priv->acc_gyr_mag_valuation.euler_angles_unit = val;
+	val = val << 2;
+	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL, &val);
+	if (ret)
+		return ret;
+	return len;
+}
+
+static ssize_t bno055_temp_unit_config_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	int unit,temp;
+	ret = regmap_read(priv->regmap, BNO055_REG_UNIT_SEL, &unit);
+	if(ret) return ret;
+	temp  = !!(unit & BNO055_UNIT_TEMP_MASK);
+	if (temp < ARRAY_SIZE(bno055_temp_unit_str))
+			return sysfs_emit(buf, "%u (%s)\n",
+					temp, bno055_temp_unit_str[temp]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", temp);
+}
+
+static ssize_t bno055_temp_unit_config_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+	if (val > ARRAY_SIZE(bno055_temp_unit_str) && val > 0){
+		return -EINVAL;
+	}
+	priv->acc_gyr_mag_valuation.temp_unit = val;
+	val = val << 4;
+	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL, &val);
+	if (ret)
+		return ret;
+	return len;
+}
+
+
+static ssize_t bno055_ori_config_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	int unit,ori;
+	ret = regmap_read(priv->regmap, BNO055_REG_UNIT_SEL, &unit);
+	if(ret) return ret;
+	ori  = !!(unit & BNO055_UNIT_ORI_MASK);
+	if (ori < ARRAY_SIZE(bno055_fusion_ori_str))
+			return sysfs_emit(buf, "%u (%s)\n",
+					ori, bno055_fusion_ori_str[ori]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", ori);
+}
+
+static ssize_t bno055_ori_config_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+	if (val > ARRAY_SIZE(bno055_temp_unit_str) && val > 0){
+		return -EINVAL;
+	}
+	priv->acc_gyr_mag_valuation.ori = val;
+	val = val << 7;
+	ret = regmap_write(priv->regmap, BNO055_REG_UNIT_SEL, &val);
+	if (ret)
+		return ret;
+	return len;
+}
+
+static ssize_t bno055_unit_config_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	int unit;
+	ret = regmap_read(priv->regmap, BNO055_REG_UNIT_SEL, &unit);
+	if(ret) return ret;
+	return sysfs_emit(buf, "%d\n", unit);
+}
+
+static ssize_t bno055_unit_config_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int cur_mode;
+	ret = bno055_read_opr_mode(priv,&cur_mode);
+	if(ret) return ret;
+	if(cur_mode != BNO055_OPR_MODE_CONFIG){
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	int acc,angular,euler,temp,ori;
+	// acc = val&0x01;
+	// if(acc!= 0 && acc != 1) return -EINVAL;
+	// angular = (val>>1)&0x01;
+	// if(angular!=1 && angular != 0) return -EINVAL;
+	// euler = (val>>2)&0x01;
+	// if(euler!=1 && euler != 0) return -EINVAL;
+	// temp = (val>>4)&0x01;
+	// if(temp!=1 && temp != 0) return -EINVAL;
+	// ori = (val>>7)&0x01;
+	// if(ori!=1 && ori != 0) return -EINVAL;acc     = !!(val & BIT(0));
+	acc     = !!(val & BIT(0));
+	angular = !!(val & BIT(1));
+	euler   = !!(val & BIT(2));
+	temp    = !!(val & BIT(4));
+	ori     = !!(val & BIT(7));
+	ret = bno_set_unit(priv,acc,angular,euler,temp,ori);
+	if(ret) return -EINVAL;;
+	return len;
+}
+
 static IIO_DEVICE_ATTR(bno055_chip_id, 0444,bno055_chip_id_show,NULL,0);
+
+static IIO_DEVICE_ATTR_RW(bno055_opr_mode, 0);
+static IIO_DEVICE_ATTR_RW(bno055_acc_unit_config, 0);
+static IIO_DEVICE_ATTR_RW(bno055_angular_unit_config, 0);
+static IIO_DEVICE_ATTR_RW(bno055_euler_unit_config, 0);
+static IIO_DEVICE_ATTR_RW(bno055_temp_unit_config, 0);
+static IIO_DEVICE_ATTR_RW(bno055_ori_config, 0);
+static IIO_DEVICE_ATTR_RW(bno055_unit_config, 0);
+
+/*Calibration*/
+static IIO_DEVICE_ATTR_RW(bno055_acc_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_gyr_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_mag_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_accradius_calibration_offset, 0);
+static IIO_DEVICE_ATTR_RW(bno055_magradius_calibration_offset, 0);
 static IIO_DEVICE_ATTR(bno055_sys_status_calibration, 0444,bno055_sys_status_calibration_show,NULL,0);
 static IIO_DEVICE_ATTR(bno055_gyr_status_calibration, 0444,bno055_gyr_status_calibration_show,NULL,0);
 static IIO_DEVICE_ATTR(bno055_acc_status_calibration, 0444,bno055_acc_status_calibration_show,NULL,0);
 static IIO_DEVICE_ATTR(bno055_mag_status_calibration, 0444,bno055_mag_status_calibration_show,NULL,0);
 static IIO_DEVICE_ATTR(bno055_calibration_status, 0444,bno055_calibration_status_show,NULL,0);
 
-static IIO_DEVICE_ATTR_RW(bno055_opr_mode, 0);
-static IIO_DEVICE_ATTR_RW(bno055_acc_calibration_offset, 0);
-static IIO_DEVICE_ATTR_RW(bno055_gyr_calibration_offset, 0);
-static IIO_DEVICE_ATTR_RW(bno055_mag_calibration_offset, 0);
-static IIO_DEVICE_ATTR_RW(bno055_accradius_calibration_offset, 0);
-static IIO_DEVICE_ATTR_RW(bno055_magradius_calibration_offset, 0);
 
 // static IIO_DEVICE_ATTR_RW(in_magn_calibration_fast_enable, 0);
 // static IIO_DEVICE_ATTR_RW(in_accel_range_raw, 0);
@@ -1398,8 +1770,14 @@ static IIO_DEVICE_ATTR_RW(bno055_magradius_calibration_offset, 0);
 // static IIO_DEVICE_ATTR_RO(in_accel_range_raw_available, 0);
 
 static struct attribute *bno055dev_attrs[] = {
-	&iio_dev_attr_bno055_chip_id.dev_attr.attr, //ok
-	&iio_dev_attr_bno055_opr_mode.dev_attr.attr, //ok
+	&iio_dev_attr_bno055_chip_id.dev_attr.attr, 
+	&iio_dev_attr_bno055_opr_mode.dev_attr.attr,
+	&iio_dev_attr_bno055_acc_unit_config.dev_attr.attr,
+	&iio_dev_attr_bno055_angular_unit_config.dev_attr.attr,
+	&iio_dev_attr_bno055_euler_unit_config.dev_attr.attr,
+	&iio_dev_attr_bno055_temp_unit_config.dev_attr.attr,
+	&iio_dev_attr_bno055_ori_config.dev_attr.attr,
+	&iio_dev_attr_bno055_unit_config.dev_attr.attr,
 	&iio_dev_attr_bno055_calibration_status.dev_attr.attr,
 	&iio_dev_attr_bno055_sys_status_calibration.dev_attr.attr,
 	&iio_dev_attr_bno055_gyr_status_calibration.dev_attr.attr,
@@ -1732,7 +2110,7 @@ static int bno_mag_config(struct bno055_priv *priv,int data_rate,int OPRMode,int
 	return ret;
 }
 
-static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  fusion_dof){
+static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, int temp, int  ori){
 	int ret;
 	int tmp;
 	//bno055_set_page_id(priv,PAGE_ID_1);
@@ -1740,8 +2118,8 @@ static int bno_set_unit(struct bno055_priv *priv,int acc,int angular,int euler, 
 	priv->acc_gyr_mag_valuation.angular_rate_gyr_unit = angular;
 	priv->acc_gyr_mag_valuation.euler_angles_unit = euler;
 	priv->acc_gyr_mag_valuation.temp_unit = temp;
-	priv->acc_gyr_mag_valuation.fusion_dof = fusion_dof;
-	tmp = priv->acc_gyr_mag_valuation.fusion_dof |
+	priv->acc_gyr_mag_valuation.ori = ori;
+	tmp = priv->acc_gyr_mag_valuation.ori |
 	      priv->acc_gyr_mag_valuation.temp_unit |
 	      priv->acc_gyr_mag_valuation.euler_angles_unit |
 	      priv->acc_gyr_mag_valuation.angular_rate_gyr_unit |

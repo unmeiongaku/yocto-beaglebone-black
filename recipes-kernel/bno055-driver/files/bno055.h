@@ -343,7 +343,7 @@ struct bno055_acc_gyr_mag_valuation{
 	int angular_rate_gyr_unit;
 	int euler_angles_unit;
 	int temp_unit;
-	int fusion_dof;
+	int ori;
 };
 
 /* ================= STATE ================= */
