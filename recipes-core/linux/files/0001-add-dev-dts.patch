@@ -1,19 +1,35 @@
 diff --git a/am335x-boneblack.dts.orig b/am335x-boneblack.dts
-index 09ea639..ffe4698 100644
+index 09ea639..98d4ff8 100644
 --- a/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
 +++ b/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
-@@ -178,3 +178,40 @@
+@@ -178,3 +178,56 @@
  &baseboard_eeprom {
  	vcc-supply = <&ldo4_reg>;
  };
 +
 +&i2c2 {
 +    status = "okay";
-+    clock-frequency = <100000>;
++    clock-frequency = <400000>;
 +    bno055@28 {
 +		status = "okay";
 +		compatible = "desmtiny,bno055";
 +		reg = <0x28>;
++	};
++	ds3231rtc@68 {
++		status = "okay";
++		compatible = "desmtiny,ds3231rtc";
++		reg = <0x68>;
++	};
++	bmp280@76 {
++		status = "okay";
++		compatible = "desmtiny,bmp280";
++		reg = <0x76>;
++	};
++	at24c256@50 {
++		status = "okay";
++		compatible = "atmel,24c256";
++		reg = <0x50>;
++		pagesize = <64>;
 +	};
 +};
 +

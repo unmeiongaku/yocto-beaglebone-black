@@ -1,0 +1,15 @@
+config RTC_DRV_DESMTINY_DS3231
+	tristate "Desmtiny DS3231 RTC driver"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say yes here to enable support for the DS3231 real-time
+	  clock over I2C.
+
+	  This driver supports:
+	    - Time read/set
+	    - Alarm with interrupt (INT pin)
+	    - Integration with Linux RTC subsystem
+
+	  To compile this driver as a module, choose M here:
+	  the module will be called ds3231rtcdev.

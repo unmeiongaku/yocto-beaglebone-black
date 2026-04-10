@@ -1,41 +1,39 @@
-This README file contains information on the contents of the meta-bbb layer.
+Build Configuration:
+BB_VERSION           = "2.8.1"
+BUILD_SYS            = "x86_64-linux"
+NATIVELSBSTRING      = "universal"
+TARGET_SYS           = "arm-poky-linux-gnueabi"
+MACHINE              = "beaglebone"
+DISTRO               = "poky"
+DISTRO_VERSION       = "5.0.15"
+TUNE_FEATURES        = "arm armv7a vfp thumb neon callconvention-hard"
+TARGET_FPU           = "hard"
 
-Please see the corresponding sections below for details.
+Author: desmtiny <nguyenhoangminhdo@gmail.com>
 
-Dependencies
-============
+For Apply Device Tree Path to Yocto Project
+Please watch this video: 
+https://youtu.be/srM6u8e4tyw?si=NSjTdhytgldjP2to
 
-  URI: <first dependency>
-  branch: <branch name>
-
-  URI: <second dependency>
-  branch: <branch name>
-
-  .
-  .
-  .
-
-Patches
-=======
-
-Please submit any patches against the meta-bbb layer to the xxxx mailing list (xxxx@zzzz.org)
-and cc: the maintainer:
-
-Maintainer: XXX YYYYYY <xxx.yyyyyy@zzzzz.com>
-
-Table of Contents
-=================
-
-  I. Adding the meta-bbb layer to your build
- II. Misc
+../poky
 
 
-I. Adding the meta-bbb layer to your build
-=================================================
 
-Run 'bitbake-layers add-layer meta-bbb'
+Makefile
 
-II. Misc
-========
+.PHONY:copy diff add  clear
 
---- replace with specific information about the meta-bbb layer ---
+copy:
+    cp ./poky/build-bbb/tmp/work-shared/beaglebone/kernel-source/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts ./
+
+    cp am335x-boneblack.dts am335x-boneblack.dts.orig
+    
+    ////Edit your dts///
+
+diff:
+	-git diff --no-index am335x-boneblack.dts.orig am335x-boneblack.dts > 0001-add-dev-dts.patch
+	cat 0001-add-dev-dts.patch
+add:
+	cp 0001-add-dev-dts.patch ./poky/meta-bbb/recipes-core/linux/files
+clear:
+	rm -rf 0001-add-dev-dts.patch
