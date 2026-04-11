@@ -6,8 +6,9 @@ echo "
  | |_| | |___ ___) | |  | | | |  | || |\  | | |  
  |____/|_____|____/|_|  |_| |_| |___|_| \_| |_|  
                                                   
-Uptime     : $(uptime)
-Hostname   : $(hostname)
-Disk Usage : $(df -h | awk '/\/$/ {print $3 " used of " $2}')
-Memory     : $(free | awk '/Mem:/ {printf "%.1fM used of %.1fM", $3/1024, $2/1024}')
+Uptime       : $(uptime)
+Hostname     : $(hostname)
+Disk Usage   : $(df -h | awk '/\/$/ {print $3 " used of " $2}')
+Memory       : $(free | awk '/Mem:/ {printf "%.1fM used of %.1fM", $3/1024, $2/1024}')
+Time         : $(cat /sys/bus/i2c/devices/2-0068/time)
 "
