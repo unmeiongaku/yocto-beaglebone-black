@@ -11,13 +11,73 @@ TARGET_FPU           = "hard"
 
 Author: desmtiny <nguyenhoangminhdo@gmail.com>
 
-For Apply Device Tree Path to Yocto Project
+Build Workspace
+
+Install Package:
+sudo apt-get -y install gawk wget git-core diffstat unzip texinfo gcc-multilib \
+     build-essential chrpath socat cpio python3 python3-pip python3-pexpect \
+     libsdl1.2-dev xterm make xsltproc docbook-utils fop dblatex xmlto
+
+Source Clone:
+git clone -b scarthgap git://git.yoctoproject.org/poky/
+ 
+cd poky
+ 
+git clone -b scarthgap git://git.openembedded.org/meta-openembedded
+ 
+git clone -b scarthgap git://git.yoctoproject.org/meta-ti
+ 
+git clone -b scarthgap https://git.yoctoproject.org/meta-arm
+
+Install Build Env:	
+source oe-init-build-env build-bbb
+
+Select Machine:	
+vim ./build-bbb/conf/local.conf
+change: MACHINE ?= “beaglebone”	
+
+Add source Path:
+vim ./build-bbb/conf/bblayers.conf
+
+POKY_BBLAYERS_CONF_VERSION = "2"
+
+BBPATH = "${TOPDIR}"
+BBFILES ?= ""
+
+BBLAYERS ?= " \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-poky \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-yocto-bsp \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-openembedded/meta-oe \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-arm/meta-arm-toolchain \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-arm/meta-arm \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-ti/meta-ti-bsp \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-ti/meta-ti-extras \
+  /home/desmtiny/workspace/BBBImage/Yocto/poky/meta-ti/meta-beagle \
+  "
+
+Build: 
+		
+bitbake core-image-minimal
+
+Clone Github Repo
+cd poky
+mkdir meta-bbb
+cd meta-bbb
+git clone https://github.com/unmeiongaku/yocto-beaglebone-black
+
+Apply path:
+/home/desmtiny/workspace/BBBImage/Yocto/poky/meta-bbb \
+
+Rebuild:
+cd ./poky/build-bbb
+bitbake core-image-minimal
+
+/*For Apply Device Tree Path to Yocto Project*/
 Please watch this video: 
 https://youtu.be/srM6u8e4tyw?si=NSjTdhytgldjP2to
 
 ../poky
-
-
 
 Makefile
 
