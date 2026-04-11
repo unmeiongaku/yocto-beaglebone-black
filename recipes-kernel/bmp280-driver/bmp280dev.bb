@@ -1,0 +1,16 @@
+SUMMARY = "Bosch BMP280 IIO driver"
+DESCRIPTION = "Linux kernel module for BNO055 BMP280"
+LICENSE = "GPL-2.0-only"
+LIC_FILES_CHKSUM = "file://COPYING;md5=4a0f8ad6a793571b331b0e19e3dd925c"
+
+inherit module
+
+SRC_URI = "file://bmp280_core.c \
+           file://bmp280_i2c.c \
+           file://bmp280.h \
+           file://COPYING \
+           file://Makefile" 
+
+S = "${WORKDIR}"
+
+KERNEL_MODULE_AUTOLOAD +="bmp280dev"
