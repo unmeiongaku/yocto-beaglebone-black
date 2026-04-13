@@ -69,6 +69,8 @@
 #define BNO055_REG_GRV_DATA_Z_LSB		0x32
 #define BNO055_REG_GRV_DATA_Z_MSB		0x33
 
+#define BNO055_SCAN_CH_COUNT ((BNO055_REG_GRV_DATA_Z_LSB - BNO055_REG_ACC_DATA_X_LSB) / 2)
+
 #define BNO055_REG_TEMP				    0x34
 #define BNO055_REG_CALIB_STAT			0x35
 #define BNO055_REG_ST_RESULT			0x36
@@ -346,11 +348,18 @@ struct bno055_acc_gyr_mag_valuation{
 	int ori;
 };
 
+
+
 /* ================= STATE ================= */
 struct bno055_priv{
 	struct regmap *regmap;
 	struct device *dev;
 	struct mutex lock;
+	int xfer_burst_break_thr;
+	struct {
+		__le16 chans[BNO055_SCAN_CH_COUNT];
+		s64 timestamp __aligned(8);
+	} buf;
 	/*BNO_CONFIG*/
 	enum bno055_opr_mode opr_mode;
 	enum bno055_axis_remap_config axis_map_config;

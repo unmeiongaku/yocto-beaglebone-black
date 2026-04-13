@@ -7,6 +7,8 @@
 
 #define DRIVER_NAME   "bno055dev"
 
+#define BNO055_I2C_XFER_BURST_BREAK_THRESHOLD 3
+
 static int bno055_i2c_probe(struct i2c_client *client)
 {
 	struct regmap *regmap;
@@ -15,7 +17,7 @@ static int bno055_i2c_probe(struct i2c_client *client)
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
-	return bno055_probe(&client->dev, regmap);
+	return bno055_probe(&client->dev, regmap,BNO055_I2C_XFER_BURST_BREAK_THRESHOLD);
 }
 
 static const struct of_device_id bno055_of_match[] = {

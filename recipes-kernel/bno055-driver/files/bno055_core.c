@@ -7,7 +7,8 @@
 #include <linux/delay.h>
 
 #include "bno055.h"
-
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 
 #define DRIVER_NAME   "bno055dev"
 #define DRIVER_AUTHOR "desmtiny nguyenhoangminh@gmail.com"
@@ -1011,26 +1012,6 @@ static ssize_t bno055_chip_id_show(struct device *dev,
 		acc, gyr, mag, bl);
 }
 
-// static bool isCalibrationReady(struct bno055_priv *priv){
-// 	int tmp;
-// 	int sys_sts,acc_sts,gyr_sts,mag_sts;
-// 	int isOk;
-// 	int ret;
-// 	ret = regmap_read(priv->regmap, BNO055_REG_CALIB_STAT,&tmp);
-// 	if(ret) return ret;
-// 	sys_sts = (tmp >> 6) & 0x03;
-// 	gyr_sts = (tmp >> 4) & 0x03;
-// 	acc_sts = (tmp >> 2) & 0x03;
-// 	mag_sts = tmp & 0x03;
-// 	if(sys_sts == 3 && gyr_sts == 3 && acc_sts == 3 && mag_sts== 3){
-// 		isOk = 1;
-// 	}
-// 	else{
-// 		isOk = 0;
-// 	}
-// 	return isOk;
-// }
-
 static ssize_t bno055_acc_calibration_offset_show(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
@@ -1814,6 +1795,120 @@ static const struct iio_info bno055dev_info = {
 
 /* ================= END IIO INFO ================= */
 
+/*
+ * Reads len samples from the HW, stores them in buf starting from buf_idx,
+ * and applies mask to cull (skip) unneeded samples.
+ * Updates buf_idx incrementing with the number of stored samples.
+ * Samples from HW are transferred into buf, then in-place copy on buf is
+ * performed in order to cull samples that need to be skipped.
+ * This avoids copies of the first samples until we hit the 1st sample to skip,
+ * and also avoids having an extra bounce buffer.
+ * buf must be able to contain len elements in spite of how many samples we are
+ * going to cull.
+ */
+
+static int bno055_scan_xfer(struct bno055_priv *priv,
+			    int start_ch, int len, unsigned long mask,
+			    __le16 *buf, int *buf_idx)
+{
+	const int base = BNO055_REG_ACC_DATA_X_LSB;
+	bool quat_in_read = false;
+	int buf_base = *buf_idx;
+	__le16 *dst, *src;
+	int offs_fixup = 0;
+	int xfer_len = len;
+	int ret;
+	int i, n;
+	if (!mask)
+		return 0;
+	if (start_ch > BNO055_SCAN_QUATERNION) {
+		start_ch += 3;
+	} else if ((start_ch <= BNO055_SCAN_QUATERNION) &&
+		 ((start_ch + len) > BNO055_SCAN_QUATERNION)) {
+		quat_in_read = true;
+		xfer_len += 3;
+	}
+	ret = regmap_bulk_read(priv->regmap,
+			       base + start_ch * sizeof(__le16),
+			       buf + buf_base,
+			       xfer_len * sizeof(__le16));
+	if (ret)
+		return ret;
+
+	for_each_set_bit(i, &mask, len) {
+		if (quat_in_read && ((start_ch + i) > BNO055_SCAN_QUATERNION))
+			offs_fixup = 3;
+
+		dst = buf + *buf_idx;
+		src = buf + buf_base + offs_fixup + i;
+
+		n = (start_ch + i == BNO055_SCAN_QUATERNION) ? 4 : 1;
+
+		if (dst != src)
+			memcpy(dst, src, n * sizeof(__le16));
+
+		*buf_idx += n;
+	}
+	return 0;
+}
+
+
+static irqreturn_t bno055dev_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *iio_dev = pf->indio_dev;
+	struct bno055_priv *priv = iio_priv(iio_dev);
+	int xfer_start, start, end, prev_end;
+	unsigned long mask;
+	int quat_extra_len;
+	bool first = true;
+	int buf_idx = 0;
+	bool thr_hit;
+	int ret;
+	mutex_lock(&priv->lock);
+	/*
+	 * Walk the bitmap and eventually perform several transfers.
+	 * Bitmap ones-fields that are separated by gaps <= xfer_burst_break_thr
+	 * will be included in same transfer.
+	 * Every time the bitmap contains a gap wider than xfer_burst_break_thr
+	 * then we split the transfer, skipping the gap.
+	 */
+	for_each_set_bitrange(start, end, iio_dev->active_scan_mask,
+			      iio_get_masklength(iio_dev)) {
+		if (first) {
+			xfer_start = start;
+		}
+		else{
+			quat_extra_len = ((start > BNO055_SCAN_QUATERNION) && (prev_end <= BNO055_SCAN_QUATERNION)) ? 3 : 0;
+			/* If the gap is wider than xfer_burst_break_thr then.. */
+			thr_hit = (start - prev_end + quat_extra_len) > priv->xfer_burst_break_thr;
+			if (thr_hit) {
+				mask = *iio_dev->active_scan_mask >> xfer_start;
+				ret = bno055_scan_xfer(priv, xfer_start, prev_end - xfer_start, mask, priv->buf.chans, &buf_idx);
+				if (ret)
+					goto done;
+				xfer_start = start;
+			}
+		}
+		first = false;
+		prev_end = end;			
+	}
+	/*
+	 * We finished walking the bitmap; no more gaps to check for. Just
+	 * perform the current transfer.
+	 */
+	mask = *iio_dev->active_scan_mask >> xfer_start;
+	ret = bno055_scan_xfer(priv, xfer_start,prev_end - xfer_start,mask, priv->buf.chans, &buf_idx);		
+	if (!ret)
+		iio_push_to_buffers_with_timestamp(iio_dev,
+						   &priv->buf, pf->timestamp);	
+done:
+	mutex_unlock(&priv->lock);
+	iio_trigger_notify_done(iio_dev->trig);
+	return IRQ_HANDLED;		
+}
+
+
 /*SET Page ID*/
 static int bno055_set_page_id(struct bno055_priv *priv,enum bno055_page_id tar_page_id)
 {
@@ -2187,9 +2282,34 @@ static int bno055_init(struct bno055_priv *priv){
 	return ret;
 }
 
+static int bno055_buffer_preenable(struct iio_dev *indio_dev)
+{
+	struct bno055_priv *priv = iio_priv(indio_dev);
+	const unsigned long fusion_mask =
+		BIT(BNO055_SCAN_YAW) |
+		BIT(BNO055_SCAN_ROLL) |
+		BIT(BNO055_SCAN_PITCH) |
+		BIT(BNO055_SCAN_QUATERNION) |
+		BIT(BNO055_SCAN_LIA_X) |
+		BIT(BNO055_SCAN_LIA_Y) |
+		BIT(BNO055_SCAN_LIA_Z) |
+		BIT(BNO055_SCAN_GRAVITY_X) |
+		BIT(BNO055_SCAN_GRAVITY_Y) |
+		BIT(BNO055_SCAN_GRAVITY_Z);
+
+	if (priv->opr_mode == BNO055_OPR_MODE_AMG &&
+	    bitmap_intersects(indio_dev->active_scan_mask, &fusion_mask,
+			      _BNO055_SCAN_MAX))
+		return -EBUSY;
+	return 0;
+}
+
+static const struct iio_buffer_setup_ops bno055dev_buffer_setup_ops = {
+	.preenable = bno055_buffer_preenable,
+};
 
 
-int bno055_probe(struct device *dev, struct regmap *regmap)
+int bno055_probe(struct device *dev, struct regmap *regmap,int xfer_burst_break_thr)
 {
 	struct bno055_priv *priv;
 	struct iio_dev *iio_dev;
@@ -2208,7 +2328,7 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 
 	priv->regmap = regmap;
 	priv->dev = dev;
-
+	priv->xfer_burst_break_thr = xfer_burst_break_thr;
 	ret = regmap_read(priv->regmap, BNO055_REG_CHIP_ID, &val);
 	if (ret)
 		return ret;
@@ -2243,6 +2363,10 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 	iio_dev->info = &bno055dev_info;
 	iio_dev->modes = INDIO_DIRECT_MODE;
 
+	ret = devm_iio_triggered_buffer_setup(dev, iio_dev, iio_pollfunc_store_time, bno055dev_trigger_handler, &bno055dev_buffer_setup_ops);
+	if (ret)
+		return ret;
+
 	ret = devm_iio_device_register(dev, iio_dev);
 	if (ret)
 		return ret;
@@ -2251,11 +2375,6 @@ int bno055_probe(struct device *dev, struct regmap *regmap)
 
 	return 0;
 }
-
-// void bno055_remove(struct device *dev, struct regmap *regmap)
-// {
-	
-// }
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR(DRIVER_AUTHOR);
