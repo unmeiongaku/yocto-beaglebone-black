@@ -2064,7 +2064,8 @@ static int bno055_system_reset(struct bno055_priv *priv){
 	bno055_set_page_id(priv,PAGE_ID_0);
 	dev_info(priv->dev, "Reset BNO055 Device: ");
 	int tmp = BNO055_SYS_TRIGGER_RST_SYS;	
-	ret = regmap_write(priv->regmap, BNO055_REG_SYS_TRIGGER,tmp);	if(ret){
+	ret = regmap_write(priv->regmap, BNO055_REG_SYS_TRIGGER,tmp);	
+	if(ret){
 	dev_err(priv->dev, "Reset Failed\n");
 		return ret;
 	}
@@ -2339,9 +2340,6 @@ int bno055_probe(struct device *dev, struct regmap *regmap,int xfer_burst_break_
 		dev_warn(dev, "Unrecognized Chip ID 0x%x\n", priv->id.CHIP_ID);
 		return -ENODEV;
 	}
-
-    msleep(50);
-
 	dev_info(dev, "BNO055 Detected\n");
 
 	ret = bno055_system_reset(priv);

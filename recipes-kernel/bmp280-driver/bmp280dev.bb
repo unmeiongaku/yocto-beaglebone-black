@@ -9,7 +9,8 @@ SRC_URI = "file://bmp280_core.c \
            file://bmp280_i2c.c \
            file://bmp280.h \
            file://COPYING \
-           file://Makefile" 
+           file://Makefile \
+           file://Kconfig" 
 
 S = "${WORKDIR}"
 

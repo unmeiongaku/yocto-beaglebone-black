@@ -1,0 +1,26 @@
+menuconfig BMP280DEV
+    tristate "Bosch BMP280 pressure sensor"
+    depends on I2C
+    depends on REGMAP_I2C
+    depends on IIO
+    help
+      Say yes here to build support for the Bosch BMP280
+      pressure and temperature sensor.
+
+      This driver supports pressure and temperature measurement
+      via the Industrial I/O (IIO) subsystem.
+
+      To compile this driver as a module, choose M here.
+      The module will be called bmp280dev.
+
+
+if BMP280DEV
+
+config BMP280DEV_I2C
+    tristate "BMP280 I2C support"
+    depends on I2C
+    select REGMAP_I2C
+    help
+      Enable I2C bus support for BMP280 sensor.
+
+endif
