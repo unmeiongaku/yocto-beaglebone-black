@@ -261,7 +261,7 @@ static int bmp280_chip_id(struct bmp280_priv *priv){
 
 static int bmp280_system_reset(struct bmp280_priv *priv){
     int ret;
-    dev_info(priv->dev, "Reset BNO055 Device: ");
+    dev_info(priv->dev, "Reset BMP280 Device: ");
     ret = regmap_write(priv->regmap, BMP280_REG_RESET,BMP280_SYS_RESET_VALUE);
     if(ret){
         dev_err(priv->dev, "Reset Failed\n");
@@ -269,7 +269,7 @@ static int bmp280_system_reset(struct bmp280_priv *priv){
     }
     usleep_range(5000, 10000); // 5–10 ms
     /*Check systemr*/
-    unsigned int val;
+    int val;
     ret = regmap_read(priv->regmap, BMP280_REG_RESET, &val);
     if(ret) return ret;
     if(val!=BMP280_SYS_RESET_VALUE){
@@ -397,9 +397,11 @@ int bmp280_probe(struct device *dev, struct regmap *regmap)
 	usleep_range(priv->start_up_time,priv->start_up_time + 100);
 
 	/*Check Chip ID*/
-	if(ret == bmp280_chip_id(priv)) return ret;
+	ret = bmp280_chip_id(priv);
+	if(ret) return ret;
 	/*Retset Device*/
 	ret = bmp280_system_reset(priv);
+	if(ret) return ret;
 	ret = bmp280_chip_config(priv);
 	if (ret)
 		return ret;
@@ -412,6 +414,8 @@ int bmp280_probe(struct device *dev, struct regmap *regmap)
 	ret = bmp280_read_calib(priv);
 	if(ret) return dev_err_probe(priv->dev, ret,
 					     "failed to read calibration coefficients\n");
+	ret = 	devm_iio_device_register(dev,iio_dev);	
+	if(ret) return ret;			 
     return 0;
 }
 
