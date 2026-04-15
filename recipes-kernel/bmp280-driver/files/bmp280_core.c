@@ -364,13 +364,6 @@ static const struct bmp280_chip_info bmp280_chip_info = {
     .press_coeffs_type = IIO_VAL_FRACTIONAL,
 };
 
-static void bmp280_regulators_disable(void *data)
-{
-	struct regulator_bulk_data *supplies = data;
-
-	regulator_bulk_disable(BMP280_NUM_SUPPLIES, supplies);
-}
-
 
 int bmp280_probe(struct device *dev, struct regmap *regmap)
 {
@@ -400,26 +393,6 @@ int bmp280_probe(struct device *dev, struct regmap *regmap)
 	priv->start_up_time = bmp280_chip_info.start_up_time;
 	priv->oversampling_press = bmp280_chip_info.oversampling_press_default;
 	priv->oversampling_temp = bmp280_chip_info.oversampling_temp_default;
-	/* Bring up regulators */
-	regulator_bulk_set_supply_names(priv->supplies,
-					bmp280_supply_names,
-					BMP280_NUM_SUPPLIES);
-	ret = devm_regulator_bulk_get(dev,
-				      BMP280_NUM_SUPPLIES, priv->supplies);
-	if (ret) {
-		dev_err(dev, "failed to get regulators\n");
-		return ret;
-	}
-	ret = regulator_bulk_enable(BMP280_NUM_SUPPLIES, priv->supplies);
-	if (ret) {
-		dev_err(dev, "failed to enable regulators\n");
-		return ret;
-	}
-	ret = devm_add_action_or_reset(dev, bmp280_regulators_disable,
-				       priv->supplies);
-	if (ret)
-		return ret;
-
 	/* Wait to make sure we started up properly */
 	usleep_range(priv->start_up_time,priv->start_up_time + 100);
 

@@ -379,7 +379,7 @@ struct bno055_mode_map {
 	u8 val;
 };
 
-int bno055_probe(struct device *dev, struct regmap *regmap);
+int bno055_probe(struct device *dev, struct regmap *regmap, int xfer_burst_break_thr);
 // void bno055_remove(struct device *dev, struct regmap *regmap);
 
 extern const struct regmap_config bno055dev_regmap_config;

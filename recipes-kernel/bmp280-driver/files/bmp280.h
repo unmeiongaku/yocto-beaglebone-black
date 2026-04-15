@@ -82,12 +82,6 @@
 #define BMP280_BURST_READ_BYTES		(BMP280_NUM_PRESS_BYTES + \
 					 BMP280_NUM_TEMP_BYTES)
 
-static const char *const bmp280_supply_names[] = {
-	"vddd", "vdda"
-};
-
-#define BMP280_NUM_SUPPLIES ARRAY_SIZE(bmp280_supply_names)
-
 /* See datasheet Section 4.2.2. */
 struct bmp280_calib {
 	u16 T1;
@@ -139,7 +133,6 @@ struct bmp280_priv{
 	__le16 bmp280_cal_buf[BMP280_CONTIGUOUS_CALIB_REGS / 2];
 
 	const struct bmp280_chip_info *chip_info;
-	struct regulator_bulk_data supplies[BMP280_NUM_SUPPLIES];
 };
 
 
