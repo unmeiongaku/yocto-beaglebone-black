@@ -29,6 +29,8 @@
 #define BMP280_REG_RESET                    0xE0
 #define BMP280_SYS_RESET_VALUE              0x68
 #define BMP280_REG_STATUS                   0xF3
+#define BMP280_STATUS_IM_UPDATE   			BIT(0)
+#define BMP280_STATUS_MEASURING   			BIT(3)
 #define BMP280_REG_CTRL_MEAS                0xF4
 #define BMP280_REG_CONFIG                   0xF5
 
@@ -44,11 +46,11 @@
 
                      
 #define BMP280_FILTER_MASK		        GENMASK(4, 2)
-#define BMP280_FILTER_OFF		        0
-#define BMP280_FILTER_2X		        1
-#define BMP280_FILTER_4X		        2
-#define BMP280_FILTER_8X		        3
-#define BMP280_FILTER_16X		        4
+// #define BMP280_FILTER_OFF		        0
+// #define BMP280_FILTER_2X		        1
+// #define BMP280_FILTER_4X		        2
+// #define BMP280_FILTER_8X		        3
+// #define BMP280_FILTER_16X		        4
 
 #define BMP280_OSRS_TEMP_MASK		    GENMASK(7, 5)
 #define BMP280_OSRS_TEMP_SKIP		    0
@@ -82,6 +84,10 @@
 #define BMP280_BURST_READ_BYTES		(BMP280_NUM_PRESS_BYTES + \
 					 BMP280_NUM_TEMP_BYTES)
 
+#define BMP280_STANDBY_MASK      GENMASK(7, 5)
+#define BMP280_FILTER_MASK       GENMASK(4, 2)
+#define BMP280_SPI3W_MASK        BIT(0)
+
 /* See datasheet Section 4.2.2. */
 struct bmp280_calib {
 	u16 T1;
@@ -96,6 +102,7 @@ struct bmp280_calib {
 	s16 P7;
 	s16 P8;
 	s16 P9;
+	__le16 bmp280_cal_buf[BMP280_CONTIGUOUS_CALIB_REGS / 2];
 };
 
 
@@ -118,6 +125,58 @@ struct bmp280_chip_info{
 	const int press_coeffs_type;
 };
 
+enum bmp280_opr_mode{
+	SLEEP_MODE =  0x00,
+	FORCE_MODE =  0x01,
+	NORMAL_MODE = 0x11,
+};
+
+enum bmp280_t_sb_standby{
+	BMP280_TSB_0_5  = 0x00,
+	BMP280_TSB_62_5 = 0x01,
+	BMP280_TSB_125  = 0x02,
+	BMP280_TSB_250  = 0x03,
+	BMP280_TSB_500  = 0x04,
+	BMP280_TSB_1000 = 0x05,
+	BMP280_TSB_2000 = 0x06,
+	BMP280_TSB_4000 = 0x07,
+};
+
+/*Table 6: filter settings*/
+enum bmp280_filter_iir{
+	BMP280_FILTER_OFF		= 0x00,
+	BMP280_FILTER_2X			= 0x01,
+	BMP280_FILTER_4X			= 0x02,
+	BMP280_FILTER_8X			= 0x03,
+	BMP280_FILTER_16X		= 0x04,
+};
+
+enum bmp280_osrs_type{
+	OSRS_TEMP = 0,
+	OSRS_PRESS = 1,
+};
+
+enum bmp280_use_case_normal{
+	HANDHELD_DEVICE_LOW_POWER,
+	HANDHELD_DEVICEC_DYNAMIC,
+	ELEVATOR_FLOOR_CHANGE_DETECTION,
+	DROP_DETECTION,
+	INDOOR_NAVIGATION,
+};
+
+struct bmp280_config{
+	int t_sb_us;	//in us 
+	int filter_delay_samples;
+	u8 spi3w_en;
+	enum bmp280_t_sb_standby enum_t_sb;
+	enum bmp280_filter_iir enum_filter;
+	int osrst;
+	int osrsp;
+};
+
+
+
+
 struct bmp280_priv{
     struct regmap *regmap;
 	struct device *dev;
@@ -127,12 +186,11 @@ struct bmp280_priv{
 	u8 oversampling_temp;
 	u8 iir_filter_coeff;
 	int chipid;
-	union {
-		struct bmp280_calib bmp280;
-	} calib;
-	__le16 bmp280_cal_buf[BMP280_CONTIGUOUS_CALIB_REGS / 2];
-
+	struct bmp280_calib calib;
 	const struct bmp280_chip_info *chip_info;
+	enum bmp280_opr_mode mode;
+	struct bmp280_config config;
+	enum bmp280_use_case_normal ucase;
 };
 
 
