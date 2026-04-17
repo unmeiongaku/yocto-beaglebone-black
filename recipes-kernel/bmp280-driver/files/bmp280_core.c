@@ -137,9 +137,10 @@ static int bmp280_read_temp_adc(struct bmp280_priv *priv, u32 *adc_temp)
         return dev_err_probe(priv->dev, ret,
                              "failed to read temperature\n");
 
-    value_temp = ((u32)priv->buft[0] << 12) |
-                ((u32)priv->buft[1] << 4)  |
-                ((u32)priv->buft[2] >> 4);
+    value_temp = ((u32)priv->buft[0] << 16) |
+                ((u32)priv->buft[1] << 8)  |
+                ((u32)priv->buft[2]);
+	value_temp >>=4; 		
 	if(value_temp == BMP280_PRESS_SKIPPED){
 		dev_err(priv->dev, "reading temperature skipped\n");
 		return -EIO;
@@ -182,9 +183,10 @@ static int bmp280_read_press_adc(struct bmp280_priv *priv, u32 *adc_press){
 		dev_err(priv->dev, "failed to read pressure\n");
 		return ret;
 	}
-	value_press = ((u32)priv->bufp[0] << 12) |
-                ((u32)priv->bufp[1] << 4)  |
-                ((u32)priv->bufp[2] >> 4);
+	value_press = ((u32)priv->bufp[0] << 16) |
+                ((u32)priv->bufp[1] << 8)  |
+                ((u32)priv->bufp[2]);
+	value_press >>=4;			
 	if(value_press == BMP280_PRESS_SKIPPED){
 		dev_err(priv->dev, "Reading pressure skipped\n");
 		return -EIO;
