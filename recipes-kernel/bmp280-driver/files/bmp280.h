@@ -125,9 +125,9 @@ struct bmp280_chip_info{
 };
 
 enum bmp280_opr_mode{
-	SLEEP_MODE =  0x00,
-	FORCE_MODE =  0x01,
-	NORMAL_MODE = 0x03,
+	SLEEP_MODE =  0x00, //0
+	FORCE_MODE =  0x01, //1 2
+	NORMAL_MODE = 0x03, //3
 };
 
 enum bmp280_t_sb_standby{

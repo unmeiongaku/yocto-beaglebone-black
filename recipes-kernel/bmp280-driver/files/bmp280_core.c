@@ -30,8 +30,8 @@ static void bmp280_regulators_disable(void *data);
 
 ///Table 5
 static const int bmp280_oversampling_avail[] = { 1, 2, 4, 8, 16 };
-static const int bmp280_temp_coeffs[] = { 10, 1 };
-static const int bmp280_press_coeffs[] = { 1, 256000 };
+static const int bmp280_temp_coeffs[] = { 100, 1 };
+static const int bmp280_press_coeffs[] = { 1, 25600 };
 
 static bool bmp280_is_writeable_reg(struct device *dev, unsigned int reg)
 {
@@ -295,8 +295,8 @@ static int bmp280_read_raw_impl(struct iio_dev *indio_dev,
 					*val2 = bmp280_press_coeffs[1];
 					return IIO_VAL_FRACTIONAL;
 				case IIO_TEMP:
-					*val = bmp280_temp_coeffs[0];
-					*val2 = bmp280_temp_coeffs[1];
+					*val = bmp280_temp_coeffs[1];
+					*val2 = bmp280_temp_coeffs[0];
 					return IIO_VAL_FRACTIONAL;
 				default:
 					return -EINVAL;
@@ -664,7 +664,7 @@ static const struct bmp280_chip_info bmp280_chip_info = {
 static const char * const bmp280_mode_str[] = {
 	"SLEEP",
 	"FORCE01",
-	"FORCE11",
+	"FORCE10",
 	"NORMAL",
 };
 
@@ -688,7 +688,7 @@ static ssize_t bmp280_opr_mode_show(struct device *dev,
 	int mode;
 	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&mode);
 	if(ret) return ret;
-	mode = mode & 0x02;
+	mode = mode & 0x03;
 	if (mode < ARRAY_SIZE(bmp280_mode_str))
 			return sysfs_emit(buf, "%u (%s)\n",
 					mode, bmp280_mode_str[mode]);
