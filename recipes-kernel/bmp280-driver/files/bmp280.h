@@ -53,20 +53,20 @@
 // #define BMP280_FILTER_16X		        4
 
 #define BMP280_OSRS_TEMP_MASK		    GENMASK(7, 5)
-#define BMP280_OSRS_TEMP_SKIP		    0
-#define BMP280_OSRS_TEMP_1X		        1
-#define BMP280_OSRS_TEMP_2X		        2
-#define BMP280_OSRS_TEMP_4X		        3
-#define BMP280_OSRS_TEMP_8X		        4
-#define BMP280_OSRS_TEMP_16X		    5
+#define BMP280_OSRS_TEMP_SKIP		    0x00
+#define BMP280_OSRS_TEMP_1X		        0x01
+#define BMP280_OSRS_TEMP_2X		        0x02
+#define BMP280_OSRS_TEMP_4X		        0x03
+#define BMP280_OSRS_TEMP_8X		        0x04
+#define BMP280_OSRS_TEMP_16X		    0x05
 
 #define BMP280_OSRS_PRESS_MASK		    GENMASK(4, 2)
-#define BMP280_OSRS_PRESS_SKIP		    0
-#define BMP280_OSRS_PRESS_1X		    1
-#define BMP280_OSRS_PRESS_2X		    2
-#define BMP280_OSRS_PRESS_4X		    3
-#define BMP280_OSRS_PRESS_8X		    4
-#define BMP280_OSRS_PRESS_16X		    5
+#define BMP280_OSRS_PRESS_SKIP		    0x00
+#define BMP280_OSRS_PRESS_1X		    0x01
+#define BMP280_OSRS_PRESS_2X		    0x02
+#define BMP280_OSRS_PRESS_4X		    0x03
+#define BMP280_OSRS_PRESS_8X		    0x04
+#define BMP280_OSRS_PRESS_16X		    0x05
 
 #define BMP280_MODE_MASK		        GENMASK(1, 0)
 #define BMP280_MODE_SLEEP		        0
@@ -74,9 +74,8 @@
 #define BMP280_MODE_NORMAL		        3
 
 /* BMP280 register skipped special values */
-#define BMP280_TEMP_SKIPPED		0x80000
+#define BMP280_TEMP_SKIPPED			0x80000
 #define BMP280_PRESS_SKIPPED		0x80000
-#define BMP280_HUMIDITY_SKIPPED		0x8000
 
 /* Number of bytes for each value */
 #define BMP280_NUM_PRESS_BYTES		3
@@ -128,7 +127,7 @@ struct bmp280_chip_info{
 enum bmp280_opr_mode{
 	SLEEP_MODE =  0x00,
 	FORCE_MODE =  0x01,
-	NORMAL_MODE = 0x11,
+	NORMAL_MODE = 0x03,
 };
 
 enum bmp280_t_sb_standby{
@@ -144,11 +143,11 @@ enum bmp280_t_sb_standby{
 
 /*Table 6: filter settings*/
 enum bmp280_filter_iir{
-	BMP280_FILTER_OFF		= 0x00,
+	BMP280_FILTER_OFF			= 0x00,
 	BMP280_FILTER_2X			= 0x01,
 	BMP280_FILTER_4X			= 0x02,
 	BMP280_FILTER_8X			= 0x03,
-	BMP280_FILTER_16X		= 0x04,
+	BMP280_FILTER_16X			= 0x04,
 };
 
 enum bmp280_osrs_type{
@@ -172,6 +171,9 @@ struct bmp280_config{
 	enum bmp280_filter_iir enum_filter;
 	int osrst;
 	int osrsp;
+	u8 ctrl_meas_osrsp;
+	u8 ctrl_meas_osrst;
+	u8 ctrl_meas_mode;
 };
 
 
@@ -182,8 +184,6 @@ struct bmp280_priv{
 	struct device *dev;
 	struct mutex lock;
 	unsigned int start_up_time; 
-	u8 oversampling_press;
-	u8 oversampling_temp;
 	u8 iir_filter_coeff;
 	int chipid;
 	struct bmp280_calib calib;
@@ -191,6 +191,14 @@ struct bmp280_priv{
 	enum bmp280_opr_mode mode;
 	struct bmp280_config config;
 	enum bmp280_use_case_normal ucase;
+
+	union {
+		/* Sensor data buffer */
+		u8 buft[BMP280_NUM_TEMP_BYTES];
+		u8 bufp[BMP280_NUM_PRESS_BYTES];
+		__le16 le16;
+		__be16 be16;
+	} __aligned(IIO_DMA_MINALIGN);
 };
 
 

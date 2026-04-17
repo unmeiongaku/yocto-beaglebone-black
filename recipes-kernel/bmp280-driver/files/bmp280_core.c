@@ -28,7 +28,10 @@ static int bmp280_init_param(struct bmp280_priv *priv);
 
 static void bmp280_regulators_disable(void *data);
 
-
+///Table 5
+static const int bmp280_oversampling_avail[] = { 1, 2, 4, 8, 16 };
+static const int bmp280_temp_coeffs[] = { 10, 1 };
+static const int bmp280_press_coeffs[] = { 1, 256000 };
 
 static bool bmp280_is_writeable_reg(struct device *dev, unsigned int reg)
 {
@@ -121,6 +124,127 @@ static const struct iio_chan_spec bmp280dev_channels[] = {
 
 #define BMP280_NUM_CHANNELS ARRAY_SIZE(bmp280dev_channels)
 
+
+static int bmp280_read_temp_adc(struct bmp280_priv *priv, u32 *adc_temp)
+{
+    int ret;
+	u32 value_temp;
+    ret = regmap_bulk_read(priv->regmap,
+                           BMP280_REG_TEMP_MSB,
+                           priv->buft,
+                           BMP280_NUM_TEMP_BYTES);
+    if (ret)
+        return dev_err_probe(priv->dev, ret,
+                             "failed to read temperature\n");
+
+    value_temp = ((u32)priv->buft[0] << 12) |
+                ((u32)priv->buft[1] << 4)  |
+                ((u32)priv->buft[2] >> 4);
+	if(value_temp == BMP280_PRESS_SKIPPED){
+		dev_err(priv->dev, "reading temperature skipped\n");
+		return -EIO;
+	}
+	*adc_temp = value_temp;
+    return 0;
+}
+
+static s32 bmp280_calc_t_fine(struct bmp280_priv *priv, u32 adc_temp)
+{
+	s32 var1, var2;
+	var1 = (((((s32)adc_temp) >> 3) - ((s32)priv->calib.T1 << 1)) *
+		((s32)priv->calib.T2)) >> 11;
+	var2 = (((((((s32)adc_temp) >> 4) - ((s32)priv->calib.T1)) *
+		  ((((s32)adc_temp >> 4) - ((s32)priv->calib.T1))) >> 12) *
+		((s32)priv->calib.T3))) >> 14;
+	return var1 + var2; /* t_fine = var1 + var2 */
+}
+
+
+static int bmp280_get_t_fine(struct bmp280_priv *priv, s32 *t_fine)
+{
+	u32 adc_temp;
+	int ret;
+
+	ret = bmp280_read_temp_adc(priv, &adc_temp);
+	if (ret)
+		return ret;
+
+	*t_fine = bmp280_calc_t_fine(priv, adc_temp);
+
+	return 0;
+}
+
+static int bmp280_read_press_adc(struct bmp280_priv *priv, u32 *adc_press){
+	u32 value_press;
+	int ret;
+	ret = regmap_bulk_read(priv->regmap, BMP280_REG_PRESS_MSB,priv->bufp,BMP280_NUM_PRESS_BYTES);
+	if (ret) {
+		dev_err(priv->dev, "failed to read pressure\n");
+		return ret;
+	}
+	value_press = ((u32)priv->bufp[0] << 12) |
+                ((u32)priv->bufp[1] << 4)  |
+                ((u32)priv->bufp[2] >> 4);
+	if(value_press == BMP280_PRESS_SKIPPED){
+		dev_err(priv->dev, "Reading pressure skipped\n");
+		return -EIO;
+	}
+	*adc_press = value_press;
+	return 0;
+}
+
+
+static u32 bmp280_compensate_press(struct bmp280_priv *priv,
+				   u32 adc_press, s32 t_fine)
+{
+	s64 var1, var2, p;
+	var1 = ((s64)t_fine) - 128000;
+	var2 = var1 * var1 * (s64)priv->calib.P6;
+	var2 += (var1 * (s64)priv->calib.P5) << 17;
+	var2 += ((s64)priv->calib.P4) << 35;
+	var1 = ((var1 * var1 * (s64)priv->calib.P3) >> 8) +
+		((var1 * (s64)priv->calib.P2) << 12);
+	var1 = ((((s64)1) << 47) + var1) * ((s64)priv->calib.P1) >> 33;
+
+	if (var1 == 0)
+		return 0;
+
+	p = ((((s64)1048576 - (s32)adc_press) << 31) - var2) * 3125;
+	p = div64_s64(p, var1);
+	var1 = (((s64)priv->calib.P9) * (p >> 13) * (p >> 13)) >> 25;
+	var2 = ((s64)(priv->calib.P8) * p) >> 19;
+	p = ((p + var1 + var2) >> 8) + (((s64)priv->calib.P7) << 4);
+	return (u32)p;
+}
+
+static int bmp280_read_press(struct bmp280_priv *priv, u32 *comp_press){
+	u32 adc_press;
+	s32 t_fine;
+	int ret;
+	ret = bmp280_get_t_fine(priv, &t_fine);
+	if (ret)
+		return ret;
+	ret = bmp280_read_press_adc(priv, &adc_press);
+	if(ret) return ret;
+	*comp_press =  bmp280_compensate_press(priv, adc_press, t_fine);
+	return 0;
+}
+
+static s32 bmp280_compensate_temp(struct bmp280_priv *priv, u32 adc_temp)
+{
+	return (bmp280_calc_t_fine(priv, adc_temp) * 5 + 128) / 256;
+}
+
+static int  bmp280_read_temp(struct bmp280_priv *priv, s32 *comp_temp){
+	u32 adc_temp;
+	int ret;
+	ret = bmp280_read_temp_adc(priv, &adc_temp);
+	if(ret) return ret;
+	*comp_temp = bmp280_compensate_temp(priv, adc_temp);
+	return 0;
+
+}
+
 static int bmp280_read_raw_impl(struct iio_dev *indio_dev,
 				struct iio_chan_spec const *chan,
 				int *val, int *val2, long mask)
@@ -133,23 +257,66 @@ static int bmp280_read_raw_impl(struct iio_dev *indio_dev,
 		case IIO_CHAN_INFO_PROCESSED:
 			switch (chan->type) {
 				case IIO_PRESSURE:
+					ret = bmp280_read_press(priv,&chan_value);
+					if(ret) return ret;
+					*val = bmp280_press_coeffs[0]*chan_value;
+					*val2 = bmp280_press_coeffs[1];
+					return IIO_VAL_FRACTIONAL;
 				case IIO_TEMP:
+					ret = bmp280_read_temp(priv,&chan_value);
+					if(ret) return ret;
+					*val = bmp280_temp_coeffs[0]*chan_value;
+					*val2 = bmp280_temp_coeffs[1];
+					return IIO_VAL_FRACTIONAL;
 				default:
 					return -EINVAL;
 			}
 		case IIO_CHAN_INFO_RAW:
 			switch (chan->type) {
 				case IIO_PRESSURE:
+					ret = bmp280_read_press(priv,&chan_value);
+					if(ret) return ret;
+					*val = chan_value;
 					return IIO_VAL_INT;
 				case IIO_TEMP:
+					ret = bmp280_read_temp(priv,&chan_value);
+					if(ret) return ret;
+					*val = chan_value;
 					return IIO_VAL_INT;
 				default:
 					return -EINVAL;
 			}
 		case IIO_CHAN_INFO_SCALE:
+			switch(chan->type){
+				case IIO_PRESSURE:
+					*val = bmp280_press_coeffs[0];
+					*val2 = bmp280_press_coeffs[1];
+					return IIO_VAL_FRACTIONAL;
+				case IIO_TEMP:
+					*val = bmp280_temp_coeffs[0];
+					*val2 = bmp280_temp_coeffs[1];
+					return IIO_VAL_FRACTIONAL;
+				default:
+					return -EINVAL;
+			}
 		case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+		switch (chan->type) {
+			case IIO_PRESSURE:
+				*val = priv->config.osrsp;
+				return IIO_VAL_INT;
+			case IIO_TEMP:
+				*val = priv->config.osrst;
+				return IIO_VAL_INT;
+			default:
+				return -EINVAL;
+		}
 		case IIO_CHAN_INFO_SAMP_FREQ:
+				*val = 1000000;
+				*val2 = priv->config.t_sb_us;
+				return IIO_VAL_FRACTIONAL;
 		case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
+			*val = priv->config.filter_delay_samples;
+			return IIO_VAL_INT;
 		default:
 			return -EINVAL;
 	}
@@ -172,80 +339,6 @@ static int bmp280_read_raw(struct iio_dev *indio_dev,
 	return ret;
 }
 
-static int bmp280_read_avail(struct iio_dev *indio_dev,
-			  struct iio_chan_spec const *chan,
-			  const int **vals,
-			  int *type,
-			  int *length,
-			  long mask)
-{
-	struct bmp280_priv *priv = iio_priv(indio_dev);
-	int ret;
-	switch (mask) {
-		case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
-			switch (chan->type) {
-				case IIO_PRESSURE:
-					break;
-				case IIO_TEMP:
-					break;
-				default:
-					return -EINVAL;
-			}
-			return IIO_AVAIL_LIST;
-		case IIO_CHAN_INFO_SAMP_FREQ:
-			return IIO_AVAIL_LIST;
-		case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
-			return IIO_AVAIL_LIST;
-		default:
-			return -EINVAL;
-	}
-	return ret;
-}
-
-static int bmp280_write_raw_impl(struct iio_dev *indio_dev,
-				 struct iio_chan_spec const *chan,
-				 int val, int val2, long mask)
-{
-	struct bmp280_priv *priv = iio_priv(indio_dev);
-	int ret;
-	guard(mutex)(&priv->lock);
-	switch (mask) {
-		case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
-			switch (chan->type) {
-				case IIO_PRESSURE:
-				case IIO_TEMP:
-				default:
-					return -EINVAL;
-			}
-		case IIO_CHAN_INFO_SAMP_FREQ:
-		case IIO_CHAN_INFO_LOW_PASS_FILTER_3DB_FREQUENCY:
-		default:
-			return -EINVAL;
-	}
-}
-
-static int bmp280_write_raw(struct iio_dev *indio_dev,
-			 struct iio_chan_spec const *chan,
-			 int val,
-			 int val2,
-			 long mask)
-{
-	struct bmp280_priv *priv = iio_priv(indio_dev);
-	int ret;
-
-	pm_runtime_get_sync(priv->dev);
-	ret = bmp280_write_raw_impl(indio_dev, chan, val, val2, mask);
-	pm_runtime_mark_last_busy(priv->dev);
-	pm_runtime_put_autosuspend(priv->dev);
-
-	return ret;
-}
-
-static const struct iio_info bmp280dev_info = {
-	.read_raw = bmp280_read_raw,
-	.read_avail = bmp280_read_avail,
-	.write_raw = bmp280_write_raw,
-};
 
 static int bmp280_chip_id(struct bmp280_priv *priv){
 	int ret;
@@ -267,18 +360,24 @@ static int bmp280_set_mode(struct bmp280_priv *priv, enum bmp280_opr_mode mode){
 	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS, &tmp);
 	if(ret) return ret;
 	currentmode = tmp & 0x03;
-	if(currentmode == mode) return 0;
-	if(currentmode != mode){
-		ret = regmap_write(priv->regmap, BMP280_REG_CTRL_MEAS,mode);
-		if(ret) return ret;
+	if(currentmode == mode){
+		priv->config.ctrl_meas_mode = mode;
+		return 0;
 	}
-	usleep_range(1000, 2000);
+	if(currentmode != mode){
+		tmp = (priv->config.ctrl_meas_osrst) | (priv->config.ctrl_meas_osrsp) | mode;
+		ret = regmap_write(priv->regmap, BMP280_REG_CTRL_MEAS,tmp);
+		if(ret) return ret;
+		usleep_range(1000, 2000);
+	}
 	/**/	
 	/*Recheck*/
 	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS, &tmp);
+	currentmode = tmp & 0x03;
 	if(ret) return ret;
-	if(tmp == mode){
+	if(currentmode == mode){
 		priv->mode = mode;
+		priv->config.ctrl_meas_mode = mode;
 	}
 	return 0;
 }
@@ -296,9 +395,7 @@ static int bmp280_set_osrs(struct bmp280_priv *priv,enum bmp280_osrs_type type,u
 				case BMP280_OSRS_TEMP_8X: priv->config.osrst = 8; break;
 				case BMP280_OSRS_TEMP_16X: priv->config.osrst = 16; break;
 			}
-			tmp = osrs << 5;
-			ret = regmap_write(priv->regmap, BMP280_REG_CTRL_MEAS,tmp);
-			if(ret) return 0;
+			priv->config.ctrl_meas_osrst = osrs << 5;
 		break;
 		case OSRS_PRESS:
 			switch(osrs){
@@ -309,13 +406,24 @@ static int bmp280_set_osrs(struct bmp280_priv *priv,enum bmp280_osrs_type type,u
 				case BMP280_OSRS_PRESS_8X: priv->config.osrsp = 8; break;
 				case BMP280_OSRS_PRESS_16X: priv->config.osrsp = 16; break;
 			}
-			tmp = (osrs & 0x03) << 2;
-			ret = regmap_write(priv->regmap, BMP280_REG_CTRL_MEAS,tmp);
-			if(ret) return 0;
+			priv->config.ctrl_meas_osrsp = osrs << 2;
 		break;
 		default:
         	return -EINVAL;
 	}
+	return 0;
+}
+
+static int bmp280_set_ctrl_meas(struct bmp280_priv *priv,u8 osrst,u8 osrsp){
+	int ret;
+	int ctrl_meas;
+	ret = bmp280_set_osrs(priv,OSRS_PRESS,osrsp);
+	if(ret) return 0;
+	ret = bmp280_set_osrs(priv,OSRS_TEMP,osrst);
+	if(ret) return 0;
+	ctrl_meas = (priv->config.ctrl_meas_osrst) | (priv->config.ctrl_meas_osrsp) | priv->config.ctrl_meas_mode;
+	ret = regmap_write(priv->regmap, BMP280_REG_CTRL_MEAS,ctrl_meas);
+	if(ret) return ret;
 	return 0;
 }
 
@@ -443,41 +551,31 @@ static int bmp280_set_use_case_normal_config(struct bmp280_priv *priv, enum bmp2
 		case HANDHELD_DEVICE_LOW_POWER:
 			ret = bmp280_set_config(priv,BMP280_TSB_62_5,BMP280_FILTER_4X,0);
 			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_16X);
-			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_2X);
+			ret = bmp280_set_ctrl_meas(priv,BMP280_OSRS_TEMP_2X,BMP280_OSRS_PRESS_16X);
 			if(ret) return ret;
 			break;
 		case HANDHELD_DEVICEC_DYNAMIC:
 			ret = bmp280_set_config(priv,BMP280_TSB_0_5,BMP280_OSRS_PRESS_16X,0);
 			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_4X);
-			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_1X);
+			ret = bmp280_set_ctrl_meas(priv,BMP280_OSRS_TEMP_1X,BMP280_OSRS_PRESS_4X);
 			if(ret) return ret;
 			break;
 		case ELEVATOR_FLOOR_CHANGE_DETECTION:
 			ret = bmp280_set_config(priv,BMP280_TSB_125,BMP280_FILTER_4X,0);
 			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_4X);
-			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_1X);
+			ret = bmp280_set_ctrl_meas(priv,BMP280_OSRS_TEMP_1X,BMP280_OSRS_PRESS_4X);
 			if(ret) return ret;
 			break;
 		case DROP_DETECTION:
 			ret = bmp280_set_config(priv,BMP280_TSB_0_5,BMP280_FILTER_OFF,0);
 			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_2X);
-			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_1X);
+			ret = bmp280_set_ctrl_meas(priv,BMP280_OSRS_TEMP_1X,BMP280_OSRS_PRESS_2X);
 			if(ret) return ret;
 			break;
 		case INDOOR_NAVIGATION:
 			ret = bmp280_set_config(priv,BMP280_TSB_0_5,BMP280_FILTER_16X,0);
 			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_16X);
-			if(ret) return ret;
-			ret = bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_2X);
+			ret = bmp280_set_ctrl_meas(priv,BMP280_OSRS_TEMP_2X,BMP280_OSRS_PRESS_16X);
 			if(ret) return ret;
 			break;
 	}
@@ -540,10 +638,7 @@ static int bmp280_read_calib(struct bmp280_priv *priv)
 	return 0;
 }
 
-///Table 5
-static const int bmp280_oversampling_avail[] = { 1, 2, 4, 8, 16 };
-static const int bmp280_temp_coeffs[] = { 10, 1 };
-static const int bmp280_press_coeffs[] = { 1, 256000 };
+
 
 static const struct bmp280_chip_info bmp280_chip_info = {
     .start_up_time = 2000,
@@ -564,6 +659,102 @@ static const struct bmp280_chip_info bmp280_chip_info = {
     .press_coeffs_type = IIO_VAL_FRACTIONAL,
 };
 
+static const char * const bmp280_mode_str[] = {
+	"SLEEP",
+	"FORCE01",
+	"FORCE11",
+	"NORMAL",
+};
+
+static const char * const bmp280_osrs[] = {
+	"SKIP",
+	"1X",
+	"2X",
+	"4X",
+	"8X",
+	"16X",
+};
+
+
+static ssize_t bmp280_opr_mode_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	int mode;
+	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&mode);
+	if(ret) return ret;
+	mode = mode & 0x02;
+	if (mode < ARRAY_SIZE(bmp280_mode_str))
+			return sysfs_emit(buf, "%u (%s)\n",
+					mode, bmp280_mode_str[mode]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", mode);
+}
+
+static ssize_t bmp280_opr_mode_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	int ret;
+		ret = kstrtouint(buf, 10, &val);
+	if (ret)
+		return ret;
+	if(val>0x03) return -EINVAL;
+	ret = bmp280_set_mode(priv,val);
+	if(ret) return ret;
+	return len;
+}
+
+// static ssize_t bmp280_osrs_temp_show(struct device *dev,
+// 				    struct device_attribute *attr,
+// 				    char *buf)
+// {
+// 	int ret;
+// 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+// 	struct bmp280_priv *priv = iio_priv(indio_dev);
+// 	int val;
+// 	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
+// 	if(ret) return ret;
+// 	int osrst = (val >> 5) & 0x07;
+// 	if (osrst < ARRAY_SIZE(bmp280_osrs))
+// 			return sysfs_emit(buf, "%u (%s)\n",
+// 					osrst, bmp280_osrs[osrst]);
+// 	return sysfs_emit(buf, "%u (UNKNOWN)\n", osrst);
+
+// }
+
+// static ssize_t bmp280_osrt_temp_store(struct device *dev,
+// 				     struct device_attribute *attr,
+// 				     const char *buf,
+// 				     size_t len)
+// {
+// 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+// 	struct bmp280_priv *priv = iio_priv(indio_dev);
+// 	unsigned int val;
+// }
+
+static IIO_DEVICE_ATTR_RW(bmp280_opr_mode, 0);
+
+static struct attribute *bmp280dev_attrs[] = {
+	&iio_dev_attr_bmp280_opr_mode.dev_attr.attr,
+};
+
+static const struct attribute_group bmp280dev_attrs_group = {
+	.attrs = bmp280dev_attrs,
+};
+
+
+static const struct iio_info bmp280dev_info = {
+	.read_raw = bmp280_read_raw,
+	// .read_avail = bmp280_read_avail,
+	.attrs = &bmp280dev_attrs_group,
+};
 
 int bmp280_probe(struct device *dev, struct regmap *regmap)
 {
@@ -591,8 +782,6 @@ int bmp280_probe(struct device *dev, struct regmap *regmap)
 	if(ret) return ret;
 	/*Init*/
 	priv->start_up_time = bmp280_chip_info.start_up_time;
-	priv->oversampling_press = bmp280_chip_info.oversampling_press_default;
-	priv->oversampling_temp = bmp280_chip_info.oversampling_temp_default;
 	/* Wait to make sure we started up properly */
 	usleep_range(priv->start_up_time,priv->start_up_time + 100);
 	/*Check Chip ID*/
@@ -609,8 +798,8 @@ int bmp280_probe(struct device *dev, struct regmap *regmap)
 	bmp280_dump_calib(priv);					 
 	/*Set Device Config*/
 	ret = bmp280_set_use_case_normal_config(priv,INDOOR_NAVIGATION);
-	if(ret) return 0;
-	dev_info(priv->dev, "BMP280 Success\n");
+	if(ret) return ret;
+	dev_info(priv->dev, "Success\n");
 	dev_set_drvdata(dev, iio_dev);	
 	ret = 	devm_iio_device_register(dev,iio_dev);	
 	if(ret) return ret;			 
