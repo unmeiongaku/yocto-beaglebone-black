@@ -7,15 +7,17 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=4a0f8ad6a793571b331b0e19e3dd925c"
 
 SRC_URI += "file://userdevices.mk \
            file://user-bno055-device.c \
+           file://user-bmp280-device.c \
            file://COPYING \
           "
 
 S = "${WORKDIR}"
 
 do_install() {
-    install -d ${D}/usr/userspace/devices/bno055/
-    install -m 0644 userdevices.mk ${D}/usr/userspace/devices/bno055/
-    install -m 0644 user-bno055-device.c ${D}/usr/userspace/devices/bno055/
+    install -d ${D}/usr/userspace/devices/sensors/
+    install -m 0644 userdevices.mk ${D}/usr/userspace/devices/sensors/
+    install -m 0644 user-bno055-device.c ${D}/usr/userspace/devices/sensors/
+    install -m 0644 user-bmp280-device.c ${D}/usr/userspace/devices/sensors/
 }
 
 FILES:${PN} += "/usr/userspace"

@@ -1982,10 +1982,10 @@ static int bno055_get_chip_id(struct bno055_priv *priv)
 
 	dev_info(dev, "=== BNO055 Chip Info ===\n");
 
-	dev_info(dev, "SW Revision: 0x%02X 0x%02X\n",
-		 priv->id.SW_REV_ID_MSB,
-		 priv->id.SW_REV_ID_LSB);
+	u16 sw_rev = (priv->id.SW_REV_ID_MSB << 8) |
+	     priv->id.SW_REV_ID_LSB;
 
+	dev_info(dev, "SW Revision: %04X\n", sw_rev);
 	dev_info(dev, "CHIP ID    : 0x%02X\n", priv->id.CHIP_ID);
 	dev_info(dev, "ACC ID     : 0x%02X\n", priv->id.ACC_ID);
 	dev_info(dev, "GYR ID     : 0x%02X\n", priv->id.GYR_ID);

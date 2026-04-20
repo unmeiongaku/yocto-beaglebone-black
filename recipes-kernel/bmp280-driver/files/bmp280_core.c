@@ -416,6 +416,7 @@ static int bmp280_set_osrs(struct bmp280_priv *priv,enum bmp280_osrs_type type,u
 	return 0;
 }
 
+
 static int bmp280_set_ctrl_meas(struct bmp280_priv *priv,u8 osrst,u8 osrsp){
 	int ret;
 	int ctrl_meas;
@@ -677,6 +678,24 @@ static const char * const bmp280_osrs[] = {
 	"16X",
 };
 
+static const char * const bmp280_t_sb[] = {
+	"0.5",
+	"62.5",
+	"125",
+	"250",
+	"500",
+	"1000",
+	"2000",
+	"4000",
+};
+
+static const char * const bmp280_iir_filter[] = {
+	"OFF",
+	"2X",
+	"4X",
+	"8X",
+	"16X",
+};
 
 static ssize_t bmp280_opr_mode_show(struct device *dev,
 				    struct device_attribute *attr,
@@ -713,38 +732,316 @@ static ssize_t bmp280_opr_mode_store(struct device *dev,
 	return len;
 }
 
-// static ssize_t bmp280_osrs_temp_show(struct device *dev,
-// 				    struct device_attribute *attr,
-// 				    char *buf)
-// {
-// 	int ret;
-// 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-// 	struct bmp280_priv *priv = iio_priv(indio_dev);
-// 	int val;
-// 	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
-// 	if(ret) return ret;
-// 	int osrst = (val >> 5) & 0x07;
-// 	if (osrst < ARRAY_SIZE(bmp280_osrs))
-// 			return sysfs_emit(buf, "%u (%s)\n",
-// 					osrst, bmp280_osrs[osrst]);
-// 	return sysfs_emit(buf, "%u (UNKNOWN)\n", osrst);
+static ssize_t bmp280_osrst_temp_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	int val;
+	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
+	if(ret) return ret;
+	int osrst = (val >> 5) & 0x07;
+	if (osrst < ARRAY_SIZE(bmp280_osrs))
+			return sysfs_emit(buf, "%u (%s)\n",
+					osrst, bmp280_osrs[osrst]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", osrst);
 
-// }
+}
 
-// static ssize_t bmp280_osrt_temp_store(struct device *dev,
-// 				     struct device_attribute *attr,
-// 				     const char *buf,
-// 				     size_t len)
-// {
-// 	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
-// 	struct bmp280_priv *priv = iio_priv(indio_dev);
-// 	unsigned int val;
-// }
+
+static ssize_t bmp280_osrst_temp_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	/*Check Mode*/
+	int currentmode;
+	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
+	if(ret) return ret;
+	currentmode = val & 0x03;
+	if(currentmode!=SLEEP_MODE){
+		dev_err(priv->dev, "Please Moving to SLEEP MODE\n");
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if(ret) return ret;
+	if(val>BMP280_OSRS_TEMP_16X) return -EINVAL;;
+	switch(val){
+		case BMP280_OSRS_TEMP_SKIP:
+			ret = bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_SKIP);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_TEMP_1X:
+			bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_1X);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_TEMP_2X:
+			bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_2X);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_TEMP_4X:
+			bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_4X);
+			if(ret) return ret;
+			break;	
+		case BMP280_OSRS_TEMP_8X:
+			bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_8X);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_TEMP_16X:
+			bmp280_set_osrs(priv,OSRS_TEMP,BMP280_OSRS_TEMP_16X);
+			if(ret) return ret;
+			break;			
+	}
+	/*Set ctrl_meas reg*/
+	int ctrl_meas;
+	ctrl_meas = (priv->config.ctrl_meas_osrst) | (priv->config.ctrl_meas_osrsp) | priv->config.ctrl_meas_mode;
+	ret = regmap_write(priv->regmap, BMP280_REG_CTRL_MEAS,ctrl_meas);
+	if(ret) return ret;
+	dev_info(priv->dev, "Success\n");
+	return len;
+}
+
+
+static ssize_t bmp280_osrsp_press_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	int val;
+	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
+	if(ret) return ret;
+	int osrsp = (val >> 2) & 0x07;
+	if (osrsp < ARRAY_SIZE(bmp280_osrs))
+			return sysfs_emit(buf, "%u (%s)\n",
+					osrsp, bmp280_osrs[osrsp]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", osrsp);
+
+}
+
+static ssize_t bmp280_osrsp_press_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	unsigned int val;
+	/*Check Mode*/
+	int currentmode;
+	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
+	if(ret) return ret;
+	currentmode = val & 0x03;
+	if(currentmode!=SLEEP_MODE){
+		dev_err(priv->dev, "Please Moving to SLEEP MODE\n");
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if(ret) return ret;
+	if(val>BMP280_OSRS_TEMP_16X) return -EINVAL;
+	switch(val){
+		case BMP280_OSRS_PRESS_SKIP:
+			ret = bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_SKIP);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_PRESS_1X:
+			bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_1X);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_PRESS_2X:
+			bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_2X);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_PRESS_4X:
+			bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_4X);
+			if(ret) return ret;
+			break;	
+		case BMP280_OSRS_PRESS_8X:
+			bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_8X);
+			if(ret) return ret;
+			break;
+		case BMP280_OSRS_PRESS_16X:
+			bmp280_set_osrs(priv,OSRS_PRESS,BMP280_OSRS_PRESS_16X);
+			if(ret) return ret;
+			break;			
+	}
+	/*Set ctrl_meas reg*/
+	int ctrl_meas;
+	ctrl_meas = (priv->config.ctrl_meas_osrst) | (priv->config.ctrl_meas_osrsp) | priv->config.ctrl_meas_mode;
+	ret = regmap_write(priv->regmap, BMP280_REG_CTRL_MEAS,ctrl_meas);
+	if(ret) return ret;
+	dev_info(priv->dev, "Success\n");
+	return len;
+}
+
+
+
+static ssize_t bmp280_t_sb_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	int val;
+	ret = regmap_read(priv->regmap, BMP280_REG_CONFIG,&val);
+	if(ret) return ret;
+	int t_sb = (val >> 5) & 0x07;
+	if(t_sb !=  priv->config.enum_t_sb) return -EINVAL;
+	if (t_sb < ARRAY_SIZE(bmp280_t_sb) && val>=0)
+			return sysfs_emit(buf, "%u (%s)\n",
+					t_sb, bmp280_t_sb[t_sb]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", t_sb);
+}
+
+static ssize_t bmp280_t_sb_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	int val;
+	/*Check Mode*/
+	int currentmode;
+	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
+	if(ret) return ret;
+	currentmode = val & 0x03;
+	if(currentmode!=SLEEP_MODE){
+		dev_err(priv->dev, "Please Moving to SLEEP MODE\n");
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if(ret) return ret;
+	if(val>BMP280_TSB_4000 && val<0) return -EINVAL;
+	ret = bmp280_set_config(priv,val,priv->config.enum_filter,0);
+	if(ret) return ret;
+	dev_info(priv->dev, "Success\n");
+	return len;
+}
+
+static ssize_t bmp280_iir_filter_show(struct device *dev,
+				    struct device_attribute *attr,
+				    char *buf)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	int val;
+	ret = regmap_read(priv->regmap, BMP280_REG_CONFIG,&val);
+	if(ret) return ret;
+	int filter = (val >> 2) & 0x07;
+	if(filter !=  priv->config.enum_filter) return -EINVAL;
+	if (filter < ARRAY_SIZE(bmp280_iir_filter) && val>=0)
+			return sysfs_emit(buf, "%u (%s)\n",
+					filter, bmp280_iir_filter[filter]);
+	return sysfs_emit(buf, "%u (UNKNOWN)\n", filter);
+}
+
+static ssize_t bmp280_iir_filter_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf,
+				     size_t len)
+{
+	int ret;
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv = iio_priv(indio_dev);
+	int val;
+	/*Check Mode*/
+	int currentmode;
+	ret = regmap_read(priv->regmap, BMP280_REG_CTRL_MEAS,&val);
+	if(ret) return ret;
+	currentmode = val & 0x03;
+	if(currentmode!=SLEEP_MODE){
+		dev_err(priv->dev, "Please Moving to SLEEP MODE\n");
+		return -EINVAL;
+	}
+	ret = kstrtouint(buf, 10, &val);
+	if(ret) return ret;
+	if(val>BMP280_FILTER_16X && val<0) return -EINVAL;
+	ret = bmp280_set_config(priv,priv->config.enum_t_sb,val,0);
+	if(ret) return ret;
+	dev_info(priv->dev, "Success\n");
+	return len;
+}
+
+static ssize_t bmp280_calibration_show(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct bmp280_priv *priv;
+	__le16 buffer[BMP280_CONTIGUOUS_CALIB_REGS / 2];
+
+	u16 T1, P1;
+	s16 T2, T3, P2, P3, P4, P5, P6, P7, P8, P9;
+
+	int ret;
+
+	if (!indio_dev)
+		return -EINVAL;
+
+	priv = iio_priv(indio_dev);
+
+	if (!priv || !priv->regmap)
+		return -EINVAL;
+
+	ret = regmap_bulk_read(priv->regmap,
+			       BMP280_REG_COMP_TEMP_START,
+			       buffer,
+			       sizeof(buffer));
+	if (ret)
+		return ret;
+
+	add_device_randomness(buffer, sizeof(buffer));
+
+	T1 = le16_to_cpu(buffer[0]);
+	T2 = le16_to_cpu(buffer[1]);
+	T3 = le16_to_cpu(buffer[2]);
+	P1 = le16_to_cpu(buffer[3]);
+	P2 = le16_to_cpu(buffer[4]);
+	P3 = le16_to_cpu(buffer[5]);
+	P4 = le16_to_cpu(buffer[6]);
+	P5 = le16_to_cpu(buffer[7]);
+	P6 = le16_to_cpu(buffer[8]);
+	P7 = le16_to_cpu(buffer[9]);
+	P8 = le16_to_cpu(buffer[10]);
+	P9 = le16_to_cpu(buffer[11]);
+
+	return sysfs_emit(buf,
+		"T1=%u\nT2=%d\nT3=%d\n"
+		"P1=%u\nP2=%d\nP3=%d\nP4=%d\nP5=%d\n"
+		"P6=%d\nP7=%d\nP8=%d\nP9=%d\n",
+		T1, T2, T3,
+		P1, P2, P3, P4, P5,
+		P6, P7, P8, P9);
+}
 
 static IIO_DEVICE_ATTR_RW(bmp280_opr_mode, 0);
+static IIO_DEVICE_ATTR_RW(bmp280_osrst_temp, 0);
+static IIO_DEVICE_ATTR_RW(bmp280_osrsp_press, 0);
+static IIO_DEVICE_ATTR_RW(bmp280_t_sb, 0);
+static IIO_DEVICE_ATTR_RW(bmp280_iir_filter, 0);
+
+static IIO_DEVICE_ATTR(bmp280_calibration, 0444,bmp280_calibration_show,NULL,0);
 
 static struct attribute *bmp280dev_attrs[] = {
 	&iio_dev_attr_bmp280_opr_mode.dev_attr.attr,
+	&iio_dev_attr_bmp280_osrst_temp.dev_attr.attr,
+	&iio_dev_attr_bmp280_osrsp_press.dev_attr.attr,
+	&iio_dev_attr_bmp280_t_sb.dev_attr.attr,
+	&iio_dev_attr_bmp280_iir_filter.dev_attr.attr,
+	&iio_dev_attr_bmp280_calibration.dev_attr.attr,
+	NULL,
 };
 
 static const struct attribute_group bmp280dev_attrs_group = {
@@ -754,7 +1051,6 @@ static const struct attribute_group bmp280dev_attrs_group = {
 
 static const struct iio_info bmp280dev_info = {
 	.read_raw = bmp280_read_raw,
-	// .read_avail = bmp280_read_avail,
 	.attrs = &bmp280dev_attrs_group,
 };
 
@@ -797,11 +1093,11 @@ int bmp280_probe(struct device *dev, struct regmap *regmap)
 	ret = bmp280_read_calib(priv);
 	if(ret) return dev_err_probe(priv->dev, ret,
 					     "failed to read calibration coefficients\n");
-	bmp280_dump_calib(priv);					 
+	//bmp280_dump_calib(priv);					 
 	/*Set Device Config*/
 	ret = bmp280_set_use_case_normal_config(priv,INDOOR_NAVIGATION);
 	if(ret) return ret;
-	dev_info(priv->dev, "Success\n");
+	dev_info(priv->dev, "Init Success\n");
 	dev_set_drvdata(dev, iio_dev);	
 	ret = 	devm_iio_device_register(dev,iio_dev);	
 	if(ret) return ret;			 
