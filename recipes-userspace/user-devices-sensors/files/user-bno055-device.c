@@ -19,13 +19,20 @@
 #define GYR_Y BASE "in_anglvel_y_raw"
 #define GYR_Z BASE "in_anglvel_z_raw"
 
-#define MAG_X BASE "in_magn_x_raw"
-#define MAG_Y BASE "in_magn_y_raw"
-#define MAG_Z BASE "in_magn_z_raw"
+#define GYR_SCALE BASE "in_anglvel_scale"
+
+#define MAGN_X BASE "in_magn_x_raw"
+#define MAGN_Y BASE "in_magn_y_raw"
+#define MAGN_Z BASE "in_magn_z_raw"
+
+#define MAGN_SCALE BASE "in_magn_scale"
 
 #define YAW   BASE "in_rot_yaw_raw"
 #define PITCH BASE "in_rot_pitch_raw"
 #define ROLL  BASE "in_rot_roll_raw"
+
+#define EUL_SCALE BASE "in_rot_scale"
+
 
 #define TEMP  BASE "in_temp_input"
 #define CALIB BASE "bno055_calibration_status"
@@ -121,34 +128,40 @@ void set_nonblocking(int enable)
 // ===== STREAM ALL =====
 void stream_all()
 {
+    float accscale,gyrscale,magnscale,eulerscale;
+    accscale = read_val_float(ACC_SCALE);
+    gyrscale = read_val_float(GYR_SCALE);
+    magnscale = read_val_float(MAGN_SCALE);
+    eulerscale = read_val_float(EUL_SCALE);
     printf("Press 'q' to quit...\n");
     set_nonblocking(1);
 
     while (1) {
-        int ax = read_val(ACC_X);
-        int ay = read_val(ACC_Y);
-        int az = read_val(ACC_Z);
+       
+        float ax = (float)(read_val_float(ACC_X)*accscale);
+        float ay = (float)(read_val_float(ACC_Y)*accscale);
+        float az = (float)(read_val_float(ACC_Z)*accscale);
 
-        int gx = read_val(GYR_X);
-        int gy = read_val(GYR_Y);
-        int gz = read_val(GYR_Z);
+        float gx = (float)(read_val_float(GYR_X)*gyrscale);
+        float gy = (float)(read_val_float(GYR_Y)*gyrscale);
+        float gz = (float)(read_val_float(GYR_Z)*gyrscale);
 
-        int mx = read_val(MAG_X);
-        int my = read_val(MAG_Y);
-        int mz = read_val(MAG_Z);
+        float mx = (float)(read_val_float(MAGN_X)*magnscale);
+        float my = (float)(read_val_float(MAGN_Y)*magnscale);
+        float mz = (float)(read_val_float(MAGN_Z)*magnscale);
 
-        int yaw = read_val(YAW);
-        int pitch = read_val(PITCH);
-        int roll = read_val(ROLL);
+        float yaw = (float)(read_val_float(YAW)*eulerscale);
+        float pitch = (float)(read_val_float(PITCH)*eulerscale);
+        float roll = (float)(read_val_float(ROLL)*eulerscale);
 
-        int temp = read_val(TEMP);
+        int temp = (read_val(TEMP)/1000);
         int calib = read_val(CALIB);
 
         printf("\033[2K\r");
-        printf("ACC[%4d %4d %4d] | ", ax, ay, az);
-        printf("GYR[%4d %4d %4d] | ", gx, gy, gz);
-        printf("MAG[%4d %4d %4d] | ", mx, my, mz);
-        printf("YPR[%4d %4d %4d] | ", yaw, pitch, roll);
+        printf("ACC[%6.2f %6.2f %6.2f] | ", ax, ay, az);
+        printf("GYR[%6.2f %6.2f %6.2f] | ", gx, gy, gz);
+        printf("MAG[%7.2f %7.2f %7.2f] | ", mx, my, mz);
+        printf("YPR[%7.2f %7.2f %7.2f] | ", yaw, pitch, roll);
         printf("T:%2d | CAL:%d", temp, calib);
 
         fflush(stdout);
@@ -156,7 +169,7 @@ void stream_all()
         char c = getchar();
         if (c == 'q') break;
 
-        usleep(100000); // 100ms
+        usleep(50000); // 100ms
     }
 
     set_nonblocking(0);
@@ -184,7 +197,6 @@ void read_acc(int i)
             z = read_val(ACC_Z); 
             printf("\r\033[KACC: X=%d Y=%d Z=%d", x, y, z);
         }
-
         fflush(stdout);
         char c = getchar();
         if (c == 'q') break;
@@ -208,7 +220,9 @@ int main()
         case 2:
             read_acc(1);
             break;
-
+        case 16:
+            stream_all();
+            break;    
         case 0:
             printf("Bye!\n");
             return 0;

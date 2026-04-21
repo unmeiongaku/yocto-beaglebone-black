@@ -1,51 +1,127 @@
 diff --git a/am335x-boneblack.dts.orig b/am335x-boneblack.dts
-index 09ea639..98d4ff8 100644
+index 09ea639..254bd6b 100644
 --- a/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
 +++ b/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
-@@ -178,3 +178,56 @@
+@@ -178,3 +178,153 @@
  &baseboard_eeprom {
  	vcc-supply = <&ldo4_reg>;
  };
 +
++/* =========================
++ * I2C2 Devices
++ * ========================= */
 +&i2c2 {
 +    status = "okay";
 +    clock-frequency = <400000>;
++
 +    bno055@28 {
-+		status = "okay";
-+		compatible = "desmtiny,bno055";
-+		reg = <0x28>;
-+	};
-+	ds3231rtc@68 {
-+		status = "okay";
-+		compatible = "desmtiny,ds3231rtc";
-+		reg = <0x68>;
-+	};
-+	bmp280@76 {
-+		status = "okay";
-+		compatible = "desmtiny,bmp280";
-+		reg = <0x76>;
-+	};
-+	at24c256@50 {
-+		status = "okay";
-+		compatible = "atmel,24c256";
-+		reg = <0x50>;
-+		pagesize = <64>;
-+	};
++        status = "okay";
++        compatible = "desmtiny,bno055";
++        reg = <0x28>;
++    };
++
++    ds3231rtc@68 {
++        status = "okay";
++        compatible = "desmtiny,ds3231rtc";
++        reg = <0x68>;
++    };
++
++    bmp280@76 {
++        status = "okay";
++        compatible = "desmtiny,bmp280";
++        reg = <0x76>;
++    };
++
++    at24c256@50 {
++        status = "okay";
++        compatible = "atmel,24c256";
++        reg = <0x50>;
++        pagesize = <64>;
++    };
 +};
 +
 +/* =========================
-+ * User LED on P8_12 (GPIO1_12)
++ * Pinmux
 + * ========================= */
-+
 +&am33xx_pinmux {
++
++    /* LED */
 +    user_led_pins: pinmux_user_led_pins {
 +        pinctrl-single,pins = <
 +            0x030 0x07  /* P8_12 -> gpio1_12 */
 +        >;
 +    };
++
++    /* BUZZER */
++    buzzer_pins: pinmux_buzzer_pins {
++        pinctrl-single,pins = <
++            0x034 0x07  /* P8_11 -> gpio1_13 */
++        >;
++    };
++
++    /* SPI1 */
++    spi1_pins: pinmux_spi1_pins {
++        pinctrl-single,pins = <
++            0x190 0x33  /* P9_31 spi1_sclk */
++            0x194 0x33  /* P9_29 spi1_d0 */
++            0x198 0x33  /* P9_30 spi1_d1 */
++            0x19c 0x33  /* P9_28 cs0 */
++            0x164 0x33  /* P9_42 cs1 */
++        >;
++    };
++
++    /* TFT control */
++    tft_pins: pinmux_tft_pins {
++        pinctrl-single,pins = <
++            0x178 0x07  /* P9_12 gpio1_28 (DC) */
++            0x0ac 0x07  /* P9_25 gpio3_21 (RESET) */
++        >;
++    };
++
++    /* PWM backlight */
++    pwm1_pins: pinmux_pwm1_pins {
++        pinctrl-single,pins = <
++            0x048 0x06  /* P9_14 ehrpwm1a */
++        >;
++    };
 +};
 +
++/* =========================
++ * SPI1 + ST7735
++ * ========================= */
++&spi1 {
++    status = "okay";
++
++    pinctrl-names = "default";
++    pinctrl-0 = <&spi1_pins &tft_pins>;
++
++    st7735@1 {
++        compatible = "desmtiny,st7735r";  /* nhớ sửa driver match */
++        reg = <1>;
++
++        spi-max-frequency = <32000000>;
++
++        dc-gpios = <&gpio1 28 GPIO_ACTIVE_HIGH>;
++        reset-gpios = <&gpio3 21 GPIO_ACTIVE_HIGH>;
++
++        rotation = <0>;
++    };
++};
++
++/* =========================
++ * PWM Enable
++ * ========================= */
++&ehrpwm1 {
++    status = "okay";
++    pinctrl-names = "default";
++    pinctrl-0 = <&pwm1_pins>;
++};
++
++/* =========================
++ * GPIO Devices
++ * ========================= */
 +&ocp {
++
 +    user_leds {
 +        compatible = "gpio-leds";
 +
@@ -54,9 +130,29 @@ index 09ea639..98d4ff8 100644
 +
 +        led0 {
 +            label = "user-led";
-+            gpios = <&gpio1 12 0>;
++            gpios = <&gpio1 12 GPIO_ACTIVE_HIGH>;
 +            default-state = "off";
 +        };
 +    };
++
++    buzzer {
++        compatible = "gpio-leds";
++
++        pinctrl-names = "default";
++        pinctrl-0 = <&buzzer_pins>;
++
++        buzzer0 {
++            label = "buzzer";
++            gpios = <&gpio1 13 GPIO_ACTIVE_HIGH>; /* đổi LOW nếu không kêu */
++            default-state = "off";
++        };
++    };
++
++    backlight {
++        compatible = "pwm-backlight";
++        pwms = <&ehrpwm1 0 50000 0>;
++        brightness-levels = <0 4 8 16 32 64 128 255>;
++        default-brightness-level = <6>;
++    };
 +};
-\ No newline at end of file
++
