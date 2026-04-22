@@ -1,0 +1,5 @@
+config DRM_TINY_ST7735R
+	tristate "ST7735R 0.96 80x160 support"
+	depends on DRM && SPI
+	select DRM_KMS_HELPER
+	select DRM_MIPI_DBI
