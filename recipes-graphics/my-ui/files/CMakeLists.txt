@@ -14,5 +14,6 @@ target_include_directories(my-ui PRIVATE
 
 target_link_libraries(my-ui
     lvgl
+    lvgl_thorvg
     m
 )

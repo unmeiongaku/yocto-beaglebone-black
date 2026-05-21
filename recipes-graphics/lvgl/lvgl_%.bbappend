@@ -10,3 +10,12 @@ PACKAGECONFIG:append = " fbdev"
 LVGL_CONFIG_USE_DRM = "0"
 LVGL_CONFIG_USE_FBDEV = "1"
 LVGL_CONFIG_USE_EVDEV = "1"
+
+
+do_configure:append() {
+    sed -r \
+        -e "s|^([[:space:]]*#define LV_USE_VECTOR_GRAPHIC[[:space:]]).*|\1 1|" \
+        -e "s|^([[:space:]]*#define LV_USE_THORVG_INTERNAL[[:space:]]).*|\1 1|" \
+        -e "s|^([[:space:]]*#define LV_USE_FS_STDIO[[:space:]]).*|\1 1|" \
+        -i "${S}/lv_conf.h"
+}
