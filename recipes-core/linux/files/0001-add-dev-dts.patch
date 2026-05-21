@@ -1,8 +1,8 @@
 diff --git a/am335x-boneblack.dts.orig b/am335x-boneblack.dts
-index 09ea639..d25fe06 100644
+index 09ea639..5a02bb8 100644
 --- a/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
 +++ b/arch/arm/boot/dts/ti/omap/am335x-boneblack.dts
-@@ -178,3 +178,199 @@
+@@ -178,3 +178,136 @@
  &baseboard_eeprom {
  	vcc-supply = <&ldo4_reg>;
  };
@@ -11,11 +11,8 @@ index 09ea639..d25fe06 100644
 + * I2C2 Devices (FIX PINMUX)
 + * ========================= */
 +&i2c2 {
-+    status = "okay";
-+    clock-frequency = <400000>;
-+
-+    pinctrl-names = "default";
-+    pinctrl-0 = <&i2c2_pins_p9>;   /* FIX: ép về P9_19 / P9_20 */
++	status = "okay";
++	clock-frequency = <400000>;
 +
 +    bno055@28 {
 +        compatible = "desmtiny,bno055";
@@ -44,14 +41,6 @@ index 09ea639..d25fe06 100644
 + * Pinmux
 + * ========================= */
 +&am33xx_pinmux {
-+
-+    i2c2_pins_p9: pinmux_i2c2_pins_p9 {
-+        pinctrl-single,pins = <
-+            0x178 0x33  /* P9_19 i2c2_scl */
-+            0x17c 0x33  /* P9_20 i2c2_sda */
-+        >;
-+    };
-+
 +    /* LED */
 +    user_led_pins: pinmux_user_led_pins {
 +        pinctrl-single,pins = <
@@ -83,22 +72,6 @@ index 09ea639..d25fe06 100644
 +        pinctrl-single,pins = <0x028 0x07>;
 +    };
 +
-+    spi1_pins: pinmux_spi1_pins {
-+        pinctrl-single,pins = <
-+            0x190 0x33  /* P9_31 spi1_sclk */
-+            0x194 0x33  /* P9_29 spi1_d0 (MISO) */
-+            0x198 0x13  /* P9_30 spi1_d1 (MOSI) */
-+            0x164 0x33  /* P9_42 spi1_cs1 */
-+        >;
-+    };
-+
-+    /* TFT control */
-+    tft_pins: pinmux_tft_pins {
-+        pinctrl-single,pins = <
-+            0x178 0x07  /* DC */
-+            0x0ac 0x07  /* RESET */
-+        >;
-+    };
 +
 +    /* PWM */
 +    pwm1_pins: pinmux_pwm1_pins {
@@ -107,35 +80,6 @@ index 09ea639..d25fe06 100644
 +        >;
 +    };
 +};
-+
-+
-+&lcdc {
-+    status = "disabled";
-+};
-+
-+/* =========================
-+ * SPI1 + ST7735
-+ * ========================= */
-+&spi1 {
-+    status = "okay";
-+
-+    pinctrl-names = "default";
-+    pinctrl-0 = <&spi1_pins &tft_pins>;
-+
-+    st7735@1 {
-+        compatible = "desmtiny,st7735r";
-+        reg = <1>;
-+
-+        spi-max-frequency = <32000000>;
-+
-+        dc-gpios = <&gpio1 28 GPIO_ACTIVE_HIGH>;
-+        reset-gpios = <&gpio3 21 GPIO_ACTIVE_HIGH>;
-+
-+        rotation = <0>;
-+        backlight = <&backlight>;
-+    };
-+};
-+
 +
 +/* =========================
 + * PWM
@@ -193,13 +137,6 @@ index 09ea639..d25fe06 100644
 +        pwmena2a { gpios = <&gpio1 14 GPIO_ACTIVE_HIGH>; };
 +        pwmena1b { gpios = <&gpio0 27 GPIO_ACTIVE_HIGH>; };
 +        pwmena2b { gpios = <&gpio2 1 GPIO_ACTIVE_HIGH>; };
-+    };
-+
-+    backlight: backlight {
-+        compatible = "pwm-backlight";
-+        pwms = <&ehrpwm1 0 500000 0>;
-+        brightness-levels = <0 4 8 16 32 64 128 255>;
-+        default-brightness-level = <6>;
 +    };
 +};
 \ No newline at end of file

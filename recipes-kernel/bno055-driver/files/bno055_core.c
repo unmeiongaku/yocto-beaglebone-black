@@ -1769,7 +1769,7 @@ static struct attribute *bno055dev_attrs[] = {
 	&iio_dev_attr_bno055_mag_calibration_offset.dev_attr.attr,
 	&iio_dev_attr_bno055_accradius_calibration_offset.dev_attr.attr,
 	&iio_dev_attr_bno055_magradius_calibration_offset.dev_attr.attr,
-	NULL
+	NULL,
 };
 
 // static BIN_ATTR_RO(calibration_data, BNO055_CALDATA_LEN);

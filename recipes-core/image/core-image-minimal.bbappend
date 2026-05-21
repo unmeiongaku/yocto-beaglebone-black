@@ -42,6 +42,7 @@ IMAGE_INSTALL:append = " \
     libstdc++ \
     libatomic \
 "
+EXTRA_IMAGE_FEATURES += "tools-sdk dev-pkgs"
 
 IMAGE_INSTALL:append = " \
     packagegroup-core-buildessential \
@@ -92,6 +93,16 @@ KERNEL_MODULE_AUTOLOAD:append = " \
     rtl8188eu \
 "
 
+IMAGE_INSTALL:append = " \
+    gcc \
+    g++ \
+    make \
+    cmake \
+    pkgconfig \
+"
+#lvgl
+#lvgl-dev
+
 IMAGE_INSTALL:append = " wpa-supplicant iw dhcpcd"
 CORE_IMAGE_EXTRA_INSTALL += " packagegroup-base-wifi kernel-modules"
 
@@ -103,3 +114,7 @@ IMAGE_INSTALL:append = " userwificonnect"
 IMAGE_INSTALL:append = " bno055dev"
 IMAGE_INSTALL:append = " ds3231rtcdev"
 IMAGE_INSTALL:append = " bmp280dev"
+
+IMAGE_INSTALL:append = " lvgl" 
+TOOLCHAIN_HOST_TASK:append = " lvgl"
+IMAGE_INSTALL:append = " my-ui"

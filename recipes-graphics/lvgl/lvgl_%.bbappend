@@ -1,14 +1,12 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-SRC_URI += "file://0001-add-dev-dts.patch"
-
 # Disable DRM backend
 PACKAGECONFIG:remove = "drm"
 
+# Enable framebuffer backend
 PACKAGECONFIG:append = " fbdev"
 
-# Optional: force values explicitly
+# Explicit values (optional)
 LVGL_CONFIG_USE_DRM = "0"
 LVGL_CONFIG_USE_FBDEV = "1"
 LVGL_CONFIG_USE_EVDEV = "1"
-
