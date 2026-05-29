@@ -117,4 +117,4 @@ IMAGE_INSTALL:append = " bmp280dev"
 
 IMAGE_INSTALL:append = " lvgl" 
 TOOLCHAIN_HOST_TASK:append = " lvgl"
-IMAGE_INSTALL:append = " my-ui"
+IMAGE_INSTALL:append = " lvgl-bbb-ui"
